@@ -1,0 +1,103 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .email-form {
+        max-width: 600px;
+        margin: 20px auto;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .form-group textarea {
+        height: 80px;
+    }
+
+    .submit-row {
+        margin-top: 20px;
+    }
+
+    .emails-display {
+        background: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        word-break: break-all;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="email-form">
+    <h1>{{ title }}</h1>
+
+    <div class="emails-display">
+        <strong>Recipients:</strong> {{ emails }}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="date">Date</label>
+            <input type="text" name="date" id="date" placeholder="Tuesday Jan 14, 2025">
+        </div>
+
+        <div class="form-group">
+            <label for="time">Time</label>
+            <input type="text" name="time" id="time" placeholder="3:45 - 4:00">
+        </div>
+
+        <div class="form-group">
+            <label for="project_name">Project Name</label>
+            <input type="text" name="project_name" id="project_name" placeholder="Project Name">
+        </div>
+
+        <div class="form-group">
+            <label for="project_description">Project Description</label>
+            <textarea name="project_description" id="project_description"
+                placeholder="Description of the project"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="contact_name">Contact Name</label>
+            <input type="text" name="contact_name" id="contact_name" placeholder="John Doe">
+        </div>
+
+        <div class="form-group">
+            <label for="contact_email">Contact Email</label>
+            <input type="email" name="contact_email" id="contact_email" placeholder="john@example.com">
+        </div>
+
+        <div class="form-group">
+            <label for="zoom_details">Zoom Details</label>
+            <textarea name="zoom_details" id="zoom_details" placeholder="Zoom meeting link and details"></textarea>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" name="send" value="Send Email" class="default">
+            <a href="/admin/user/sponsor/" class="button cancel-link">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

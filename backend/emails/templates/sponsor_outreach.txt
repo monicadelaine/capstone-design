@@ -1,0 +1,12 @@
+Hello,
+
+I am reaching out to you and your organization regarding an opportunity to collaborate with the UA CS Capstone course this {{ semester }}. This culminating experience enables students to showcase their knowledge and skills by developing real-world applications for external clients. Students work in groups of 4-6 for 15 weeks within an Agile project structure.
+
+We are collecting projects for presentation for {{ collection_date }}. If you have any appropriate efforts, we would be very interested in working with you. Please complete the information form linked at the bottom of this email. We present available projects the first week of each semester (2nd week of January and 3rd week of August). Students indicate their interest in available projects via a bid process.
+
+We are interested in projects every semester. I am available to discuss possible projects and answer any questions. Feel free to email me or we can schedule a Zoom meeting.
+
+Submit project to be presented to students: https://ua-capstone-projects.com/
+
+Best regards,
+UA CS Capstone Team

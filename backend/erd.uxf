@@ -1,0 +1,125 @@
+<diagram program="umletino" version="15.1"><zoom_level>8</zoom_level><element><id>UMLClass</id><coordinates><x>32</x><y>224</y><w>232</w><h>136</h></coordinates><panel_attributes>User.Sponsor
+--
+id: int (PK)
+first_name: string (max_length=30)
+last_name: string (max_length=30)
+email: email_field (email)
+organization: string (max_length=50, nullable)
+phone_number: string (max_length=18, nullable)
+projects_allowed: int (default=3)
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=red
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>32</x><y>376</y><w>232</w><h>176</h></coordinates><panel_attributes>User.Student
+--
+id: int (PK)
+cwid: string (max_length=8, unique)
+first_name: string (max_length=30)
+middle_name: string (max_length=30, nullable)
+last_name: string (max_length=30)
+preferred_name: string (max_length=30, nullable)
+email: email_field (email)
+description: text (nullable)
+class_code: string (max_length=9, nullable)
+major_code: string (max_length=3, nullable)
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=red
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>632</x><y>256</y><w>232</w><h>136</h></coordinates><panel_attributes>Project.Project
+--
+id: int (PK)
+name: string (max_length=100)
+description: text (nullable)
+sponsor_id: int (FK to Sponsor)
+sponsor_availability: text (nullable)
+**status: string (choices: IP, CNCL, CMPL, PNDG)**
+**website: url (nullable)**
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=orange
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>328</x><y>320</y><w>192</w><h>112</h></coordinates><panel_attributes>Project.Preference
+--
+id: slug (PK, &lt;student_id&gt;-&lt;project_id&gt;)
+student_id: int (FK to Student)
+project_id: int (FK to Project)
+rank: int (choices: 1, 2, 3)
+semester: int (FK to Semester)
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=orange
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>328</x><y>448</y><w>192</w><h>104</h></coordinates><panel_attributes>Project.Assignment
+--
+id: slug (PK, &lt;student_id&gt;-&lt;semester_id&gt;)
+semester: int (FK to Semester)
+student_id: int (FK to Student)
+project_id: int (FK to Project)
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=orange
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>256</x><y>296</y><w>392</w><h>32</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>10;10;470;10</additional_attributes></element><element><id>Relation</id><coordinates><x>256</x><y>400</y><w>88</w><h>32</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>10;10;90;10</additional_attributes></element><element><id>Relation</id><coordinates><x>512</x><y>336</y><w>136</w><h>32</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>150;10;10;10</additional_attributes></element><element><id>Relation</id><coordinates><x>256</x><y>480</y><w>88</w><h>32</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>10;10;90;10</additional_attributes></element><element><id>Relation</id><coordinates><x>512</x><y>360</y><w>136</w><h>168</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>150;10;100;10;100;180;10;180</additional_attributes></element><element><id>UMLClass</id><coordinates><x>632</x><y>104</y><w>192</w><h>104</h></coordinates><panel_attributes>Project.Attachment
+--
+id: int (PK)
+project_id: int (FK to Project)
+type: string (enumerable)
+url: url (pointer to a file or web link)
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=orange
+transparency=90</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>672</x><y>200</y><w>40</w><h>72</h></coordinates><panel_attributes>lt=-
+m1=0..*
+m2=1</panel_attributes><additional_attributes>10;10;10;70</additional_attributes></element><element><id>UMLClass</id><coordinates><x>632</x><y>440</y><w>232</w><h>112</h></coordinates><panel_attributes>Project.Semester
+--
+id: int (PK)
+semester: string (choices: fall, spring, summer)
+year: int (default=current)
+assignment_date: datetime
+projects: MtM field (Project.Project)
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=orange
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>672</x><y>384</y><w>40</w><h>72</h></coordinates><panel_attributes>lt=-
+m1=0..*
+m2=0..*
+</panel_attributes><additional_attributes>10;10;10;70</additional_attributes></element><element><id>Relation</id><coordinates><x>512</x><y>520</y><w>136</w><h>32</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>150;10;10;10</additional_attributes></element><element><id>Text</id><coordinates><x>720</x><y>400</y><w>200</w><h>40</h></coordinates><panel_attributes>Django automatically handles the through-table via the ManyToMany field
+style=wordwrap
+fg=blue</panel_attributes><additional_attributes></additional_attributes></element><element><id>UMLClass</id><coordinates><x>328</x><y>176</y><w>192</w><h>112</h></coordinates><panel_attributes>Project.Feedback
+--
+id: int (PK)
+sponsor_id: int (FK to Sponsor)
+project_id: int (FK to Project)
+semester_id: int (FK to Semester)
+text: text
+created_at: datetime (auto)
+updated_at: datetime (auto)
+
+bg=orange
+transparency=70</panel_attributes><additional_attributes></additional_attributes></element><element><id>Relation</id><coordinates><x>256</x><y>248</y><w>88</w><h>40</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*
+</panel_attributes><additional_attributes>10;20;90;20</additional_attributes></element><element><id>Relation</id><coordinates><x>512</x><y>208</y><w>136</w><h>104</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*
+</panel_attributes><additional_attributes>150;100;100;100;100;10;10;10</additional_attributes></element><element><id>Relation</id><coordinates><x>512</x><y>256</y><w>136</w><h>232</h></coordinates><panel_attributes>lt=-
+m1=0..*
+m2=1</panel_attributes><additional_attributes>10;10;80;10;80;260;150;260</additional_attributes></element><element><id>Relation</id><coordinates><x>512</x><y>400</y><w>136</w><h>112</h></coordinates><panel_attributes>lt=-
+m1=1
+m2=0..*</panel_attributes><additional_attributes>150;110;60;110;60;10;10;10</additional_attributes></element></diagram>

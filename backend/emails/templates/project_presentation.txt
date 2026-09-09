@@ -1,0 +1,35 @@
+Thank you for agreeing to pitch your project to the computer science senior design class. If this time does not work for you, please let me know. Thanks.
+
+Your time slot:
+
+{{ date }} {{ time }}
+
+Presentation pointers
+
+- Plan for presentation of 5-7 minutes to allow time for students to ask questions
+
+- Questions to answer
+
+  - What is the vision for the application? What will users be able to do? Who are the users? What makes these users unique?
+  - Why is it important? What is the impact?
+  - Is the application to be accessed via the Internet or phones, or both? Do you need logins? Will there be user accounts? How many users do you expect?
+  - Is there an existing application? (even if preliminary)
+
+- If you know any technical details, communicate them
+
+- If you don't know the technical details, communicate that (students can consult on the best tools for the application)
+
+  - Provide access to project web pages or project descriptions
+
+Project information
+
+{{ project_name }}
+
+{{ project_description }}
+
+{{ contact_name }}
+{{ contact_email }}
+
+Zoom Link
+
+{{ zoom_details }}

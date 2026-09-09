@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Presentation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        .highlight {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-left: 4px solid #007bff;
+            margin: 20px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            font-size: 14px;
+            color: #666;
+        }
+        ul, ol {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>Thank you for agreeing to pitch your project to the computer science senior design class. If this time does not work for you, please let me know. Thanks.</p>
+        
+        <div class="highlight">
+            <strong>Your time slot:</strong><br>
+            {{ date }} {{ time }}
+        </div>
+        
+        <h3>Presentation pointers</h3>
+        <ul>
+            <li><strong>Plan for presentation of 5-7 minutes</strong> to allow time for students to ask questions</li>
+        </ul>
+        
+        <h4>Questions to answer:</h4>
+        <ul>
+            <li>What is the vision for the application? What will users be able to do? Who are the users? What makes these users unique?</li>
+            <li>Why is it important? What is the impact?</li>
+            <li>Is the application to be accessed via the Internet or phones, or both? Do you need logins? Will there be user accounts? How many users do you expect?</li>
+            <li>Is there an existing application? (even if preliminary)</li>
+        </ul>
+        
+        <ul>
+            <li>If you know any technical details, communicate them</li>
+            <li>If you don't know the technical details, communicate that (students can consult on the best tools for the application)</li>
+            <ul>
+                <li>Provide access to project web pages or project descriptions</li>
+            </ul>
+        </ul>
+        
+        <h3>Project information</h3>
+        <p><strong>{{ project_name }}</strong></p>
+        <p>{{ project_description }}</p>
+        <p>{{ contact_name }}<br>
+        {{ contact_email }}</p>
+        
+        <h3>Zoom Link</h3>
+        <p><a href="{{ zoom_details }}" style="color: #007bff; text-decoration: underline;">{{ zoom_details }}</a></p>
+        
+        {% if projects %}
+        <h3>Your Projects</h3>
+        {% for project in projects %}
+        <div style="border:1px solid #ddd; border-radius:4px; padding:10px; margin-bottom:10px;">
+            <strong>{{ project.name }}</strong>
+            {% if project.status %}<br><small>Status: {{ project.status }}</small>{% endif %}
+            {% if project.description %}<p>{{ project.description }}</p>{% endif %}
+            {% if project.website %}<p>Website: <a href="{{ project.website }}">{{ project.website }}</a></p>{% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</body>
+</html>

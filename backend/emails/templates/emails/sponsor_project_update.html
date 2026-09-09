@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UA CS Capstone - Your Projects Update</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f9f9f9;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        .project {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: white;
+        }
+        .project h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-in-progress { background: #ffc107; color: #000; }
+        .status-pending { background: #6c757d; color: white; }
+        .status-complete { background: #28a745; color: white; }
+        .status-cancelled { background: #dc3545; color: white; }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>Hello,</p>
+        
+        <p>Here is an update on your project(s) for the {{ semester }} {{ year }} semester:</p>
+        
+        {% if projects %}
+            {% for project in projects %}
+            <div class="project">
+                <h3>{{ project.name }}</h3>
+                <p><strong>Status:</strong> 
+                    <span class="status {% if project.status == 'IP' %}status-in-progress{% elif project.status == 'PNDG' %}status-pending{% elif project.status == 'CMPL' %}status-complete{% elif project.status == 'CNCL' %}status-cancelled{% endif %}">
+                        {% if project.status == 'IP' %}In Progress
+                        {% elif project.status == 'PNDG' %}Pending
+                        {% elif project.status == 'CMPL' %}Complete
+                        {% elif project.status == 'CNCL' %}Cancelled{% endif %}
+                    </span>
+                </p>
+                {% if project.description %}
+                <p><strong>Description:</strong> {{ project.description }}</p>
+                {% endif %}
+                {% if project.website %}
+                <p><strong>Website:</strong> <a href="{{ project.website }}">{{ project.website }}</a></p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>You don't have any projects assigned for this semester.</p>
+        {% endif %}
+        
+        <p>If you have any questions or would like to discuss your project, please don't hesitate to reach out.</p>
+        
+        <div class="footer">
+            <p>Best regards,<br>
+            UA CS Capstone Team</p>
+        </div>
+    </div>
+</body>
+</html>

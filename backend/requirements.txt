@@ -1,0 +1,15 @@
+# TODO Pick package versions to use [#3]
+boto3
+django
+django-admin-action-forms
+django-cors-headers
+django-filter
+django-import-export
+django-storages
+djangorestframework
+psycopg[binary,pool]
+pytest
+pytest-cov
+pytest-django
+python-jose[cryptography]
+requests

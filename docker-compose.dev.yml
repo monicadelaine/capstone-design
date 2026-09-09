@@ -1,0 +1,107 @@
+services:
+  backend:
+    build: ./backend
+    command: python manage.py runserver 0.0.0.0:8000
+    user: "appuser"
+    volumes:
+      - ./backend/:/usr/src/app/
+    ports:
+      - 8000:8000
+    env_file:
+      - ./.env.dev
+    depends_on:
+      - db
+      - minio
+      - minio-bootstrap
+    cap_drop:
+      - ALL
+    cap_add:
+      # Django's dev server needs these to bind to a port and handle processes
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp
+
+  frontend:
+    build: ./frontend
+    command: npm run dev -- --host
+    volumes:
+      - ./frontend:/app
+      # Named volume instead of anonymous — preserves the chown we did in the image
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - 5173:5173
+    env_file:
+      - ./frontend/.env.dev.local
+    depends_on:
+      - backend
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    environment:
+    - CHOKIDAR_USEPOLLING=true
+    - TMPDIR=/tmp/vite      # or just rely on /tmp
+    tmpfs:
+      - /tmp
+      - /tmp/vite:size=256m 
+
+  db:
+    # TODO Upgrade version of Postgres [#3]
+    image: postgres:17
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - ./.env.dev.db 
+    cap_drop:
+      - ALL
+    cap_add:
+      # Postgres needs these to initialize and manage its data directory
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - IPC_LOCK
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    cap_drop:
+      - ALL
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    env_file:
+      - ./.env.dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-bootstrap:
+    image: minio/mc
+    env_file:
+      - ./.env.dev
+    depends_on:
+      - minio
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo "Waiting for MinIO..."
+          sleep 1
+        done
+
+        mc mb --ignore-existing local/"$${AWS_STORAGE_BUCKET_NAME}"
+
+volumes:
+  postgres_data:
+  frontend_node_modules:
+  minio_data:

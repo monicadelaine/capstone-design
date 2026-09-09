@@ -1,0 +1,116 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .sponsor-info {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+
+    .sponsor-info h3 {
+        margin-top: 0;
+    }
+
+    .sponsor-info table {
+        width: 100%;
+    }
+
+    .sponsor-info td {
+        padding: 5px;
+    }
+
+    .attachments-section {
+        margin-top: 20px;
+    }
+
+    .attachments-section h3 {
+        margin-bottom: 10px;
+    }
+
+    .attachments-table {
+        width: 100%;
+    }
+
+    .attachments-table th,
+    .attachments-table td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        text-align: left;
+    }
+
+    .attachments-table th {
+        background: #f0f0f0;
+    }
+
+    .download-btn {
+        background: #007bff;
+        color: white;
+        padding: 5px 10px;
+        text-decoration: none;
+        border-radius: 3px;
+    }
+
+    .download-btn:hover {
+        background: #0056b3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ block.super }}
+
+{% if original %}
+<div class="sponsor-info">
+    <h3>Sponsor Details</h3>
+    <table>
+        <tr>
+            <td><strong>Email:</strong></td>
+            <td>{{ original.email }}</td>
+        </tr>
+        <tr>
+            <td><strong>Organization:</strong></td>
+            <td>{{ original.organization|default:"-" }}</td>
+        </tr>
+        <tr>
+            <td><strong>Phone:</strong></td>
+            <td>{{ original.phone_number|default:"-" }}</td>
+        </tr>
+    </table>
+</div>
+
+<div class="attachments-section">
+    <h3>Recent Email Attachments</h3>
+    {% if recent_attachments %}
+    <table class="attachments-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Created</th>
+                <th>Download</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for attachment in recent_attachments %}
+            <tr>
+                <td>{{ attachment.id }}</td>
+                <td>{{ attachment.title }}</td>
+                <td>{{ attachment.created_at|date:"M d, Y H:i" }}</td>
+                <td>
+                    <a href="/admin/project/attachment/{{ attachment.id }}/download/" class="download-btn"
+                        target="_blank">Download</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No email attachments found for this sponsor.</p>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .email-form {
+        max-width: 600px;
+        margin: 20px auto;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .form-group textarea {
+        height: 80px;
+    }
+
+    .submit-row {
+        margin-top: 20px;
+    }
+
+    .emails-display {
+        background: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        word-break: break-all;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="email-form">
+    <h1>{{ title }}</h1>
+
+    <div class="emails-display">
+        <strong>Recipients:</strong> {{ emails }}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label for="semester">Semester</label>
+            <select name="semester" id="semester">
+                {% for sem in semesters %}
+                <option value="{{ sem|lower }}">{{ sem }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="collection_date">Collection Date</label>
+            <input type="text" name="collection_date" id="collection_date" placeholder="{{ semester_placeholder }}">
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" name="send" value="Send Email" class="default">
+            <a href="/admin/user/sponsor/" class="button cancel-link">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
