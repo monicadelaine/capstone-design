@@ -6,6 +6,13 @@ This Computer Science Capstone project is sponsored by Dr. Monica Anderson Herzo
 
 Read more on this project's [Github Pages](https://jmburke4.github.io/capstone-design-manager/).
 
+## Project Links
+
+- **GitHub Project board:** https://github.com/users/mbaizhakyp/projects/1
+- **Team:** Gaurav Shrivastava, Jayden White, Margulan Baizhakyp, Noland Miller
+- **Sponsor:** Dr. Monica Anderson Herzog, Computer Science, The University of Alabama
+- **Prior team's repository (reference only):** https://github.com/jmburke4/capstone-design-manager
+
 ## Setup
 
     If on Windows, use a Unix-like terminal (Such as Cygwin)
