@@ -43,7 +43,7 @@ Tests: `docker compose -f docker-compose.dev.yml exec backend pytest -q`
 
 ## How we work
 
-One Issue per piece of work, labeled by type. Code changes go on a branch and through a pull request with CI green and one teammate's review. Documentation changes may be committed to `main` directly. Three stand-ups a week as GitHub Issues. Details in the [development guide](docs/development-guide/README.md#start-your-work-on-a-branch).
+One Issue per piece of work, labeled by type. Code changes go on a branch and through a pull request with CI green and one teammate's review. Documentation changes may be committed to `main` directly. An Issue moves to Done only when it meets the [Definition of Done](docs/definition-of-done.md). Three stand-ups a week as GitHub Issues. Details in the [development guide](docs/development-guide/README.md#start-your-work-on-a-branch).
 
 ## Technology
 
