@@ -1,122 +1,50 @@
-# Capstone Design Project Management
+# Capstone Design Manager
 
-## Introduction
+A web platform for the University of Alabama Computer Science senior design course. Sponsors submit projects, students rank their choices, and the instructor assigns teams, in one place instead of email and spreadsheets.
 
-This Computer Science Capstone project is sponsored by Dr. Monica Anderson Herzog. The purpose of this project is to create a platform for Dr. Anderson to manage new and ongoing senior design projects.
+**Sponsor:** Dr. Monica Anderson Herzog, Department of Computer Science, The University of Alabama
+**Team (CS 495, Fall 2026):** Gaurav Shrivastava, Jayden White, Margulan Baizhakyp, Noland Miller
 
-Read more on this project's [Github Pages](https://jmburke4.github.io/capstone-design-manager/).
+## Status
 
-## Project Links
+**Iteration 1 (due 2026-09-24).** We are building on the Spring 2026 team's codebase ([ADR-001](docs/decisions/ADR-001-stack.md)). The full stack runs locally with Docker Compose and the backend test suite passes in CI. Not yet deployed; hosting is under investigation. No new user-facing features are live yet.
+
+Delivered so far: local development environment and guide, CI, architecture decisions, data model, project board and backlog.
+
+## Links
 
 - **GitHub Project board:** https://github.com/users/mbaizhakyp/projects/1
-- **Team:** Gaurav Shrivastava, Jayden White, Margulan Baizhakyp, Noland Miller
-- **Sponsor:** Dr. Monica Anderson Herzog, Computer Science, The University of Alabama
+- **Documentation:** [docs/](docs/) — [development guide](docs/development-guide/), [data model](docs/development-guide/data-model.md), [decisions](docs/decisions/), [v1 reference](docs/investigations/v1-reference.md)
+- **Course records:** [course/](course/) — presentations, iteration reviews and retrospectives
+- **Stand-ups:** [Issues labeled `stand-up`](https://github.com/monicadelaine/capstone-design/issues?q=label%3Astand-up)
 - **Prior team's repository (reference only):** https://github.com/jmburke4/capstone-design-manager
 
-## Setup
+## Run it locally
 
-    If on Windows, use a Unix-like terminal (Such as Cygwin)
+Requires Docker Desktop and Git. Full steps in the [development guide](docs/development-guide/README.md).
 
-1. Create environment files
+```
+cp .env.example .env.dev
+cp .env.example.db .env.dev.db
+cp frontend/.env.example.local frontend/.env.dev.local
+# edit the three files; see the development guide for values
+docker compose -f docker-compose.dev.yml up --build -d
+docker compose -f docker-compose.dev.yml exec backend python manage.py migrate --noinput
+```
 
-    The ```docker-compose.yml``` scripts require valid ```.env``` and ```.env.db``` files to be in the root directory. See ```env.example``` and ```env.example.db``` for ```.env``` file examples. The default naming conventions for this repositories development environment are ```docker-compose.dev.yml```, ```.env.dev```, and ```.env.deb.db```. In these files you must configure a default username, password, and default database name.
+| Service | Address |
+|---|---|
+| Website | http://localhost:5173 |
+| Django admin | http://localhost:8000/admin/ |
+| Mailhog (email) | http://localhost:8025 |
+| MinIO console (files) | http://localhost:9001 |
 
-    > Never commit your own development or production environment files to keep secrets protected.
+Tests: `docker compose -f docker-compose.dev.yml exec backend pytest -q`
 
-2. Start the Docker engine on your machine
+## How we work
 
-3. Build containers
+One Issue per piece of work, labeled by type. Code changes go on a branch and through a pull request with CI green and one teammate's review. Documentation changes may be committed to `main` directly. Three stand-ups a week as GitHub Issues. Details in the [development guide](docs/development-guide/README.md#start-your-work-on-a-branch).
 
-    > Specify a compose script with ```docker-compose -f <compose script name>```
+## Technology
 
-     ```docker-compose -f <compose script> build```
-4. Start containers
-
-    ```docker-compose -f <compose script> up```
-5. Run migrations
-
-    ```docker-compose -f <compose script> exec backend python manage.py migrate --noinput```
-
-    > If you have added new models or a new app, run ```docker-compose -f <compose script> exec backend python manage.py makemigrations``` before running the migrate command
-
-6. Create Admin User
-
-    ```docker-compose -f <compose script> exec backend python manage.py createsuperuser ```
-
-    > Setting up an admin will allow you to log in to the Django admin page.
-
-7. Stop containers
-
-    ```docker-compose -f <compose script> stop```
-
-## Repository Structure
-
-## Docker Commands
-
-| Command | Description |
-|--|--|
-|```docker-compose build```| Builds an image using the docker-compose.yml in the cwd |
-|```docker-compose up -d```| Starts a container from the build image(s), ```-d``` detaches the process from your terminal |
-|```docker-compose up -d --build```| Starts containers after rebuilding them |
-|```docker-compose stop```| Stops the running containers |
-|```docker-compose down -v```| Stops running containers and removes them, ```-v``` also removes volumes |
-|```docker-compose exec <service> <command>```| Execute a command inside the specified container |
-
-Quick psql [reference](google.com/search?smstk=ChhCWU5MUDBsODdkNUFLM3BaK1hxRnpvdz0QBA%3D%3D&smstidx=0&q=quick+and+dirty+psql+commands&udm=50&csuir=1&aep=34&kgs=9e62baadf59f9e95&shem=bdsle,epsdc&shndl=37&shmd=H4sIAAAAAAAA_3WNOw7CMBAFSZsjICG5RiImDQXiLtbGttYr4k92HQWOR8upMDWinac307-6_rCsZO8KklOOuD5VkWVWNsfYkOxvodYiV623bRtQKlSyQ1u1eGAbToVzzBooGgnA3tSwxikBzUNJeNy9O_NPQBHQi564dSihxpxx9miQwZFPVY-PH2baPzlgZ8bL2ZVv4wMhIaRZxAAAAA&shmds=v1_ATWGeePY93TdMuXM0BfH7IdnnF4SioeAjgHOXkjlgJovPO_njw&source=sh/x/aio/m1/1)
-
-
-## Setting Up Oauth (Shared dev tenant)
-
-- **Auth0 Tenant:** `dev-qjyd077ykn3qqq7v.us.auth0.com`
-- **Client ID:** `WMPr5zJLNFI0j9A8iUymDfAsP2mUXsn3`
-- **API Identifier:** `https://backend-api-capstone/`
-
-Instructions:
-1. Perform clean build (You may need to remove/delete cotainers and volumes. This is easily done via the docker desktop GUI dashboard or CLI.)
-2. Copy and paste the following values int /.env.dev **AND** /frontend/.env.local (if /frontend/.env.local dne, create it and add the env variables):
-
-    AUTH0_DOMAIN=dev-qjyd077ykn3qqq7v.us.auth0.com
-    AUTH0_CLIENT_ID=WMPr5zJLNFI0j9A8iUymDfAsP2mUXsn3
-    AUTH0_AUDIENCE=https://backend-api-capstone/
-
-For the .env.dev.local in the frontend directory, you will need to add the prefix 'VITE_' to each of the variables like:
-    
-    VITE_AUTH0_DOMAIN=dev-qjyd077ykn3qqq7v.us.auth0.com
-    VITE_AUTH0_CLIENT_ID=WMPr5zJLNFI0j9A8iUymDfAsP2mUXsn3
-    VITE_AUTH0_AUDIENCE=https://backend-api-capstone/
-
-(These are front public variables, and it is fine to include them in the readme and upload to the repo. These values are subject to change.)
-
-
-## Creating App Users
-
-Once the project is built and deployed with Auth0 correctly configured, a user will need to create an account to access the app.
-
-Assuming the user has navigated to the landing page of the app, they will see two options: 
-
-- **Log In**
-- **Sign Up**
-
-A first-time user must select "Sign Up." They will then be prompted with two options:
-
-- **I am a Student**
-- **I am a Sponsor**
-
-If the user is a student in the capstone class, they should select "I am a Student." Upon doing so, they will be navigated to the Auth0 signup page, where the following restrictions will be applied:
-
-- **The user will only be able to sign up using an email with the @crimson.ua.edu domain**
-- **The user will only be able to use the 'email-password' sign-in option, as they are restricted to Crimson emails and MySSO has yet to be configured.**
-- **Upon signing up, Auth0 will send a verification email to the email used when signing up. Only after verifying their email will the user be able to log in to the app with their new account.**
-- **If the user signs up with a Crimson email that does not exist in the student table in the PostgreSQL database, they will not be fed an error message and will only be able to log out. This is to prevent students who are not in the capstone class from using the app.**
-
-If the user is a sponsor, they should select "I am a Sponsor." Doing so will navigate them to the Auth0 signup page. For sponsors, social logins (such as Google SSO) will be available. If the sponsor signs up with the 'email-password' option, they must complete the email verification before being granted access to the app. Currently, there is no option to resend the verification email, and Auth0 Email Authentication links expire after 7 days. In future development, an option to resend the verification link would be a valuable feature.
-
-The sign-up process is fragile, and there will be ways to confuse the role-assignment operation that occurs when a user navigates from the app sign-up page to the Auth0 client. Effectively, the intended designed flow goes as follows:
-
-- **User selects sign up as either sponsor or student"**
-- **User is redirected to the Auth0 signup page, and their role is passed as a hint**
-- **The Auth0 action scripts trigger and handle the user based on their role, erroring if their role is obfuscated**
-- **When creating a user, Auth0 uses the hint and assigns role metadata to the new account according to it**
-- **Upon subsequent logins with the new account, the metadata will be referenced and passed to the App in order to direct the user to their correct landing page**
-
-It is highly likely that the current implementation is vulnerable to role spoofing/privilege escalation. However, given the current nature of the app, this does not pose a severe threat but only a potentially severe annoyance for the admin.
+Vue 3 + Vite frontend, Django REST Framework backend, PostgreSQL, Auth0 for login, MinIO/S3 for file storage, Docker Compose for development. See [docs/decisions/](docs/decisions/) for why.
