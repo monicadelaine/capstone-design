@@ -2,23 +2,64 @@
 import { FormKit } from '@formkit/vue';
 import apiService from '../services/api';
 import { useAuth0 } from '@auth0/auth0-vue';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import ConfirmationModal from './ConfirmationModal.vue';
 
 const { getAccessTokenSilently } = useAuth0();
 const router = useRouter();
 const sponsorId = ref(null);
+const profile = ref(null);
 const tooManyProjects = ref(false);
 const showConfirm = ref(false);
 const pendingSubmission = ref(null);
+const submitting = ref(false);
+const submitError = ref(null);
+
+// Inputs are locked while the sponsor is at their limit or a submission is in flight.
+const formDisabled = computed(() => tooManyProjects.value || submitting.value);
+
+// "Ada Lovelace, Analytical Engines (ada@example.com)" from the sponsor profile.
+const submittingAs = computed(() => {
+  const p = profile.value;
+  if (!p) return '';
+  const name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+  const who = [name, p.organization].filter(Boolean).join(', ');
+  return p.email ? `${who} (${p.email})` : who;
+});
+
+// Labels for server-side field errors that map to inputs on this form.
+const FIELD_LABELS = {
+  name: 'Project name',
+  description: 'Project description',
+  website: 'Website',
+  sponsor_availability: 'Sponsor availability',
+};
+
+/** Turn an API failure into text the sponsor can act on. */
+function describeError(error) {
+  const data = error?.response?.data;
+
+  if (data && typeof data === 'object') {
+    const messages = Object.entries(data).flatMap(([field, value]) => {
+      const list = Array.isArray(value) ? value : [value];
+      const label = FIELD_LABELS[field];
+      return list.map((msg) => (label ? `${label}: ${msg}` : String(msg)));
+    });
+    if (messages.length) return messages.join(' ');
+  }
+
+  if (typeof data === 'string' && data.trim()) return data;
+  return error?.message || 'Submission failed. Please try again.';
+}
 
 async function loadProjectLimitState() {
   const token = await getAccessTokenSilently();
   apiService.setToken(token);
 
   const profileResponse = await apiService.getProfile();
-  sponsorId.value = profileResponse.data.id ?? null;
+  profile.value = profileResponse.data ?? null;
+  sponsorId.value = profileResponse.data?.id ?? null;
 
   if (!sponsorId.value) {
     tooManyProjects.value = false;
@@ -59,13 +100,15 @@ const cancelConfirm = () => {
 async function handleSubmission() {
   const data = pendingSubmission.value;
 
-  if (!data || tooManyProjects.value) {
+  if (!data || tooManyProjects.value || submitting.value) {
     cancelConfirm();
     return;
   }
 
   showConfirm.value = false;
   pendingSubmission.value = null;
+  submitError.value = null;
+  submitting.value = true;
 
   try {
     const projectPayload = {
@@ -84,13 +127,10 @@ async function handleSubmission() {
     });
 
   } catch (error) {
-    console.error("Submission failed:", error)
-    if (error instanceof Error) {
-      alert(error.message); 
-    } else {
-      // fallback for unexpected errors
-      alert("Submission failed.");
-    }
+    console.error('Submission failed:', error);
+    submitError.value = describeError(error);
+  } finally {
+    submitting.value = false;
   }
 }
 
@@ -102,13 +142,17 @@ async function handleSubmission() {
     <div v-if="tooManyProjects" class="warning-block" role="alert">
           You have reached the maximum number of allowed projects, so this form is currently disabled.
     </div>
+    <div v-if="submitError" class="info error" role="alert">
+          <strong>Your proposal was not submitted.</strong>
+          <p>{{ submitError }}</p>
+    </div>
     <div class="card">
     <div class="form-container">
         <FormKit 
         type="form" 
         id="sponsor-form"
-        submit-label="Submit Project Proposal"
-        :submit-attrs="{ disabled: tooManyProjects }"
+        :submit-label="submitting ? 'Submitting...' : 'Submit Project Proposal'"
+        :submit-attrs="{ disabled: formDisabled }"
       @submit="openConfirm"
         >
 
@@ -147,22 +191,11 @@ async function handleSubmission() {
         <hr />
 
         <FormKit type="group" name="sponsor_info">
-            <h3>Contact Information</h3>
-            <FormKit
-            type="text"
-            name="company_name"
-            label="Company/Organization"
-            validation="required"
-            :disabled="tooManyProjects"
-            />
-
-            <FormKit
-            type="email"
-            name="contact_email"
-            label="Primary Contact Email"
-            validation="required|email"
-            :disabled="tooManyProjects"
-            />
+            <h3>Sponsor Availability</h3>
+            <p v-if="submittingAs" class="submitting-as">
+              Submitting as <strong>{{ submittingAs }}</strong>.
+              <router-link to="/profile/edit">Edit profile</router-link>
+            </p>
 
             <FormKit
             type="textarea"
@@ -170,7 +203,7 @@ async function handleSubmission() {
             label="Sponsor Availability"
             validation="required"
             help="State days of the week and the respective times of day you are available (Morning/Afternoon)"
-            :disabled="tooManyProjects"
+            :disabled="formDisabled"
             />
         </FormKit>
 
@@ -183,7 +216,7 @@ async function handleSubmission() {
             name="name"
             label="Project Name"
             validation="required|length:5,100"
-            :disabled="tooManyProjects"
+            :disabled="formDisabled"
             />
             
             <FormKit
@@ -192,7 +225,7 @@ async function handleSubmission() {
             label="Project/Company Website"
             placeholder="https://..."
             validation="url"
-            :disabled="tooManyProjects"
+            :disabled="formDisabled"
             />
 
             <FormKit
@@ -200,7 +233,7 @@ async function handleSubmission() {
             name="description"
             label="Project Description"
             validation="required|length:20,2000"
-            :disabled="tooManyProjects"
+            :disabled="formDisabled"
             />
         </FormKit>
         </FormKit>
@@ -225,6 +258,14 @@ hr {
   text-align: left;
   max-width: var(--max-content-width);
   margin: 0 auto;
+}
+
+.info.error {
+  margin-bottom: 1rem;
+}
+
+.submitting-as {
+  margin-bottom: 1rem;
 }
 
 .warning-block {
