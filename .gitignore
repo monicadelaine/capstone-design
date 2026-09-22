@@ -13,6 +13,9 @@ dist/
 # Environment
 .env
 .env.*
+!.env.example
+!.env.example.db
+!frontend/.env.example.local
 
 # OS / editor
 .DS_Store
