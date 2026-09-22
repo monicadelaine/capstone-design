@@ -1,7 +1,7 @@
 # TODO Pick package versions to use [#3]
 boto3
 django
-django-admin-action-forms
+django-admin-action-forms==2.2.1
 django-cors-headers
 django-filter
 django-import-export
