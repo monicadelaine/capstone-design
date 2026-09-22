@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 import pytest
-from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -9,22 +8,37 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from project.models import Assignment, Feedback, Preference, Project, Semester
+from user.authentication import UserWrapper
 from user.models import Sponsor, Student
+
+
+def make_client(email, roles):
+    """An API client authenticated as an Auth0 user with the given email and roles."""
+    client = APIClient()
+    client.force_authenticate(user=UserWrapper({
+        'email': email,
+        'sub': f'auth0|{email}',
+        'roles': roles,
+    }))
+    return client
 
 
 @pytest.fixture
 def api_client(db):
-    """Create an authenticated API client for testing."""
-    client = APIClient()
-    # Create a test user for authentication
-    user = User.objects.create_user(
-        username='testuser',
-        email='testuser@example.com',
-        password='testpass123'
-    )
-    # Force authenticate the client with the test user
-    client.force_authenticate(user=user)
-    return client
+    """Admin-role client. Admins may read and write everything."""
+    return make_client('admin@example.com', ['admin'])
+
+
+@pytest.fixture
+def sponsor_client(db, sample_sponsor):
+    """Client logged in as sample_sponsor with the sponsor role."""
+    return make_client(sample_sponsor.email, ['sponsor'])
+
+
+@pytest.fixture
+def student_client(db, sample_student):
+    """Client logged in as sample_student with the student role."""
+    return make_client(sample_student.email, ['student'])
 
 
 @pytest.fixture
@@ -521,3 +535,151 @@ class TestFeedbackViewSet:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["semester"] == sample_semester.id
+
+
+@pytest.mark.django_db
+class TestProjectWriteRules:
+    """Who may create, change, and delete projects, and under which sponsor."""
+
+    @staticmethod
+    def payload(sponsor, name="Sponsor Project"):
+        return {
+            "name": name,
+            "description": "Submitted through the API by a sponsor.",
+            "sponsor": sponsor.id,
+            "sponsor_availability": "Weekday mornings",
+        }
+
+    # Reads stay open to every authenticated role.
+
+    def test_student_can_read_a_project(self, student_client, sample_project):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = student_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == sample_project.id
+
+    # Only sponsors and admins may write.
+
+    def test_student_cannot_create_project(self, student_client, sample_sponsor):
+        url = reverse("project:project-list")
+        response = student_client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Project.objects.filter(name="Sponsor Project").exists()
+
+    def test_user_without_role_cannot_create_project(self, sample_sponsor):
+        client = make_client("nobody@example.com", [])
+        url = reverse("project:project-list")
+        response = client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_student_cannot_delete_project(self, student_client, sample_project):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = student_client.delete(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Project.objects.filter(id=sample_project.id).exists()
+
+    # A sponsor may only act under their own sponsor record.
+
+    def test_sponsor_creates_own_project(self, sponsor_client, sample_sponsor):
+        url = reverse("project:project-list")
+        response = sponsor_client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        project = Project.objects.get(name="Sponsor Project")
+        assert project.sponsor == sample_sponsor
+        assert project.status == Project.StatusChoices.PENDING
+
+    def test_sponsor_cannot_create_for_another_sponsor(self, sponsor_client, second_sponsor):
+        url = reverse("project:project-list")
+        response = sponsor_client.post(url, self.payload(second_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "own sponsor account" in str(response.data["sponsor"])
+        assert not Project.objects.filter(name="Sponsor Project").exists()
+
+    def test_sponsor_without_profile_cannot_create(self, sample_sponsor):
+        client = make_client("ghost@example.com", ["sponsor"])
+        url = reverse("project:project-list")
+        response = client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "sponsor" in response.data
+
+    def test_sponsor_updates_own_project(self, sponsor_client, sample_project):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = sponsor_client.patch(url, {"description": "Updated by owner"}, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        sample_project.refresh_from_db()
+        assert sample_project.description == "Updated by owner"
+
+    def test_sponsor_cannot_update_another_sponsors_project(self, sponsor_client, second_sponsor):
+        other = Project.objects.create(name="Not Mine", sponsor=second_sponsor)
+        url = reverse("project:project-detail", args=[other.id])
+        response = sponsor_client.patch(url, {"description": "Tampered"}, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        other.refresh_from_db()
+        assert other.description is None
+
+    def test_sponsor_cannot_move_project_to_another_sponsor(self, sponsor_client, sample_project, second_sponsor):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = sponsor_client.patch(url, {"sponsor": second_sponsor.id}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        sample_project.refresh_from_db()
+        assert sample_project.sponsor_id != second_sponsor.id
+
+    def test_sponsor_cannot_delete_another_sponsors_project(self, sponsor_client, second_sponsor):
+        other = Project.objects.create(name="Not Mine", sponsor=second_sponsor)
+        url = reverse("project:project-detail", args=[other.id])
+        response = sponsor_client.delete(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Project.objects.filter(id=other.id).exists()
+
+    # The projects_allowed limit is enforced on the server.
+
+    def test_sponsor_project_limit_enforced(self, sponsor_client, sample_sponsor):
+        sample_sponsor.projects_allowed = 1
+        sample_sponsor.save()
+        url = reverse("project:project-list")
+
+        first = sponsor_client.post(url, self.payload(sample_sponsor, "First"), format="json")
+        second = sponsor_client.post(url, self.payload(sample_sponsor, "Second"), format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_400_BAD_REQUEST
+        assert "maximum of 1 projects" in str(second.data["sponsor"])
+        assert Project.objects.filter(sponsor=sample_sponsor).count() == 1
+
+    def test_admin_bypasses_project_limit(self, api_client, sample_sponsor):
+        sample_sponsor.projects_allowed = 0
+        sample_sponsor.save()
+        url = reverse("project:project-list")
+        response = api_client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    # Project names are unique per sponsor, with a readable message.
+
+    def test_duplicate_name_for_same_sponsor_rejected(self, sponsor_client, sample_project):
+        url = reverse("project:project-list")
+        response = sponsor_client.post(
+            url, self.payload(sample_project.sponsor, sample_project.name), format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "already have a project with this name" in str(response.data)
+
+    def test_same_name_allowed_for_different_sponsor(self, api_client, sample_project, second_sponsor):
+        url = reverse("project:project-list")
+        response = api_client.post(
+            url, self.payload(second_sponsor, sample_project.name), format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED

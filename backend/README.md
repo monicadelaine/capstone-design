@@ -11,6 +11,10 @@ The REST API can be interacted with by using ```curl```, the [Django Browsable A
 | Update | PATCH/PUT | ```/api/v1/projects/<id>``` |
 | Delete | DELETE | ```/api/v1/projects/<id>``` |
 
+### Who can write projects
+
+Any authenticated user can read projects. Creating, editing, or deleting a project requires the `sponsor` or `admin` role from the Auth0 token. A sponsor can only act on projects under their own sponsor record (matched by email), cannot submit more than their `projects_allowed` count, and cannot reuse a project name. Admins bypass all three rules. See `project/permissions.py` and `ProjectSerializer` in `project/serializers.py`.
+
 ## Admin Panel - Email Actions
 
 The Django admin panel provides email functionality for sponsors. Access it at `/admin/`.
