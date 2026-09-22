@@ -9,6 +9,7 @@ Read more on this project's [Github Pages](https://jmburke4.github.io/capstone-d
 ## Project Links
 
 - **GitHub Project board:** https://github.com/users/mbaizhakyp/projects/1
+- **Definition of Done:** [docs/definition-of-done.md](docs/definition-of-done.md)
 - **Team:** Gaurav Shrivastava, Jayden White, Margulan Baizhakyp, Noland Miller
 - **Sponsor:** Dr. Monica Anderson Herzog, Computer Science, The University of Alabama
 - **Prior team's repository (reference only):** https://github.com/jmburke4/capstone-design-manager
