@@ -1,6 +1,6 @@
 # Documentation
 
-Handoff documentation for the Capstone Design Manager. Each folder names its audience at the top. Course process records (presentations, iteration reviews) live in [`course/`](../course/), not here.
+Handoff documentation for the Capstone Design Manager. Each folder names its audience at the top. Course process records (presentations, iteration reviews) live in [`course/`](../course/), not here. The team's [Definition of Done](definition-of-done.md) says when an Issue may move to Done.
 
 | Folder | Audience | Contents |
 |---|---|---|

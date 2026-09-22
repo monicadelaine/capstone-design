@@ -8,7 +8,7 @@ An Issue moves to **Done** on the project board only when every item below is tr
 
 1. **Acceptance criteria met.** Every bullet under the Issue's *Acceptance Criteria* is satisfied, and the Issue's *Completion Evidence* section links the pull request, commit, or file path that proves it. An Issue with no evidence link is not done.
 
-2. **Changes merged.** The work is on `main` through a pull request from a feature branch, with the PR template filled in and merge conflicts resolved. Work that only exists on a branch or a laptop is not done.
+2. **Changes merged.** The work is on `main`. Code changes get there through a pull request from a feature branch, with the PR template filled in, CI green, and one teammate's review. Documentation-only changes may be committed to `main` directly, as the README describes. Work that only exists on a branch or a laptop is not done.
 
 3. **Tests pass.** The CI check on the pull request is green. New or changed behavior has automated test coverage where it can be tested, and a feature has at least one test that exercises it. If the way tests are run changes, `docs/testing/` is updated to match.
 
