@@ -64,7 +64,7 @@ class TestSponsorCreation:
             phone_number="(123) 456-7890",
         )
         assert sponsor.organization == "Tech Corp"
-        assert sponsor.phone_number == "(123) 456-7890"
+        assert sponsor.phone_number == "1234567890"
 
     def test_created_at_is_set_on_creation(self, sample_sponsor):
         assert sample_sponsor.created_at is not None

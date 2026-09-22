@@ -74,7 +74,7 @@ services:
       - ALL
 
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     env_file:
       - ./.env.dev
@@ -85,7 +85,7 @@ services:
       - minio_data:/data
 
   minio-bootstrap:
-    image: minio/mc
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     env_file:
       - ./.env.dev
     depends_on:

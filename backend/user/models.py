@@ -23,7 +23,7 @@ class Sponsor(models.Model):
     """[Optional] A company, school, or other organization the sponsor may be attached to"""
 
     phone_number = models.CharField(
-        max_length=15,
+        max_length=20,
         blank=True,
         null=True,
         validators=[
