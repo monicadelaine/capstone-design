@@ -58,7 +58,7 @@ The backend README has a fuller per-file breakdown under "Unit Tests (Pytest)".
 
 ## Where tests run automatically
 
-`.github/workflows/test.yml` runs the backend suite on every push and pull request. The frontend suite is being added to the workflow under #19. A pull request should not be merged with a red check.
+`.github/workflows/test.yml` runs both suites as separate jobs, `backend` and `frontend`, on every push and pull request. The backend job installs from `backend/requirements.txt` on Python 3.12; the frontend job runs `npm ci` and `npm run test` on Node 24 to match the Dockerfile. A pull request should not be merged with a red check.
 
 ## Conventions
 
