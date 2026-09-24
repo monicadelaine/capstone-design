@@ -39,7 +39,7 @@ docker compose -f docker-compose.dev.yml exec backend python manage.py migrate -
 | Mailhog (email) | http://localhost:8025 |
 | MinIO console (files) | http://localhost:9001 |
 
-Tests: `docker compose -f docker-compose.dev.yml exec backend pytest -q`
+Tests: `scripts/test.sh` on macOS, Linux, or Git Bash, or `.\scripts\test.ps1` in PowerShell, runs both suites. Details in [docs/testing/](docs/testing/).
 
 ## How we work
 

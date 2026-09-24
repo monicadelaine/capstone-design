@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiMock = vi.hoisted(() => ({
     getProfile: vi.fn(),
+    getCurrentSemester: vi.fn(),
     client: {
         get: vi.fn(),
     },
@@ -18,6 +19,7 @@ describe('studentStore', () => {
     beforeEach(() => {
         setActivePinia(createPinia())
         apiMock.getProfile.mockReset()
+        apiMock.getCurrentSemester.mockReset()
         apiMock.client.get.mockReset()
     })
 
@@ -58,9 +60,9 @@ describe('studentStore', () => {
             .mockResolvedValueOnce({
                 data: [{ id: 'a1', student: 10, project: 2 }],
             })
-            .mockResolvedValueOnce({
-                data: { id: 7, assignment_date: '2099-01-01T00:00:00Z' },
-            })
+        apiMock.getCurrentSemester.mockResolvedValueOnce({
+            data: { id: 7, assignment_date: '2099-01-01T00:00:00Z' },
+        })
 
         await store.fetchProfileAndPrefs()
 
@@ -78,7 +80,7 @@ describe('studentStore', () => {
         apiMock.client.get
             .mockResolvedValueOnce({ data: [] })
             .mockRejectedValueOnce(new Error('assignments fail'))
-            .mockRejectedValueOnce(new Error('semester fail'))
+        apiMock.getCurrentSemester.mockRejectedValueOnce(new Error('semester fail'))
 
         await store.fetchProfileAndPrefs()
 

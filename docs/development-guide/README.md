@@ -127,12 +127,12 @@ Run the Django system check:
 ```
 docker compose -f docker-compose.dev.yml exec backend python manage.py check
 ```
-Run the backend tests:
+Run the tests, both the backend and frontend suites:
 
 ```
-docker compose -f docker-compose.dev.yml exec backend pytest -q
+scripts/test.sh
 ```
-At the current baseline, the backend test suite passes completely. The exact test count may increase as we add more tests.
+In PowerShell use `.\scripts\test.ps1` instead. At the current baseline both suites pass completely. The exact test counts will increase as we add more tests. See [docs/testing/](../testing/README.md) for running one suite or one file.
 
 
 ## Open the local site
@@ -168,8 +168,9 @@ git status
 Before you push your branch, run the tests again:
 
 ```
-docker compose -f docker-compose.dev.yml exec backend pytest -q
+scripts/test.sh
 ```
+PowerShell: `.\scripts\test.ps1`
 Then stage, commit, and push your work:
 
 ```
