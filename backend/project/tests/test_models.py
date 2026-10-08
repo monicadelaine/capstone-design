@@ -437,8 +437,20 @@ class TestAttachment:
         assert str(attachment) == f"{sample_project} (link)"
 
     def test_attachment_delete_removes_file(self, sample_project, monkeypatch):
-        """Test that deleting an attachment cleans up the MinIO file"""
+        """Test that deleting an attachment cleans up the stored file"""
         from django.core.files.uploadedfile import SimpleUploadedFile
+
+        storage = Attachment._meta.get_field("file").storage
+        deleted_files = []
+
+        def mock_save(name, content, max_length=None):
+            return name
+
+        def mock_delete(name):
+            deleted_files.append(name)
+
+        monkeypatch.setattr(storage, "save", mock_save)
+        monkeypatch.setattr(storage, "delete", mock_delete)
 
         uploaded_file = SimpleUploadedFile(
             "test.pdf",
@@ -452,21 +464,9 @@ class TestAttachment:
         )
 
         file_path = attachment.file.name
-        assert attachment.file
-
-        # Mock the storage delete method to verify it gets called
-        delete_called = []
-
-        def mock_delete(name):
-            delete_called.append(name)
-
-        original_delete = attachment.file.storage.delete
-        monkeypatch.setattr(attachment.file.storage, "delete", mock_delete)
-
         attachment.delete()
 
-        # Verify the file delete was called
-        assert file_path in delete_called
+        assert file_path in deleted_files
         assert Attachment.objects.filter(id=attachment.id).count() == 0
 
     def test_attachment_delete_link_only(self, sample_project):

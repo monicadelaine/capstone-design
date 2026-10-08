@@ -1,7 +1,9 @@
 from django.core.validators import FileExtensionValidator
 from django.urls import reverse
 from rest_framework.serializers import FileField, ModelSerializer, CharField, ListSerializer, ValidationError, DateTimeField, SerializerMethodField
+from rest_framework.validators import UniqueTogetherValidator
 from .models import Attachment, Semester, Preference, Project, Assignment, Feedback, ALLOWED_ATTACHMENT_FILE_EXTENSIONS, validate_attachment_file_size
+from .permissions import ROLE_SPONSOR, is_admin, sponsor_for_user, user_has_role
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,6 +15,45 @@ class ProjectSerializer(ModelSerializer):
     class Meta:
         model = Project
         fields = '__all__'
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Project.objects.all(),
+                fields=['name', 'sponsor'],
+                message='You already have a project with this name.',
+            ),
+        ]
+
+    def _acting_sponsor(self):
+        """The request user when they hold the sponsor role without admin rights, else None."""
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or is_admin(user) or not user_has_role(user, ROLE_SPONSOR):
+            return None
+        return user
+
+    def validate_sponsor(self, sponsor):
+        """A sponsor may only name their own sponsor record; admins may name any."""
+        user = self._acting_sponsor()
+        if user is not None:
+            own = sponsor_for_user(user)
+            if own is None or own.id != sponsor.id:
+                raise ValidationError('You can only submit projects under your own sponsor account.')
+        return sponsor
+
+    def validate(self, attrs):
+        """On create, hold sponsors to their projects_allowed limit. Admins are exempt."""
+        if self.instance is None and self._acting_sponsor() is not None:
+            sponsor = attrs.get('sponsor')
+            if sponsor is not None:
+                existing = Project.objects.filter(sponsor=sponsor).count()
+                if existing >= sponsor.projects_allowed:
+                    raise ValidationError({
+                        'sponsor': (
+                            f'You have reached the maximum of {sponsor.projects_allowed} projects. '
+                            'Contact the instructor if you need to submit more.'
+                        )
+                    })
+        return attrs
 
 
 class AttachmentSerializer(ModelSerializer):

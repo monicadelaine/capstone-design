@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from user.authentication import Auth0Authentication
 
 from .models import Assignment, Attachment, Feedback, Preference, Project, Semester
+from .permissions import ProjectWritePermission
 from .serializers import (
     AssignmentSerializer,
     AttachmentSerializer,
@@ -34,7 +35,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     filterset_fields = ['name', 'sponsor', 'status']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    # Reads: any authenticated user. Writes: admins, or sponsors on their own projects.
+    permission_classes = [IsAuthenticated, ProjectWritePermission]
 
     # TODO Add error handling if a semester DNE for the current date
     def list(self, request, *args, **kwargs):
