@@ -3,6 +3,7 @@ import logging
 
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -90,6 +91,16 @@ class PreferenceAPIView(APIView):
     authentication_classes = [Auth0Authentication]
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def deadline_closed_response():
+        """Returns a 403 response if the current semester's preference deadline has passed, otherwise None"""
+        now = timezone.now()
+        semester = Semester.objects.filter(semester=Semester.get_semester_by_date(now), year=now.year).first()
+        if semester and now > semester.assignment_date:
+            return Response({'error': 'The preference deadline has passed. Preferences can no longer be changed.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        return None
+
     def get(self, request, pk=None, format=None):
         if pk:
             preference = get_object_or_404(Preference, pk=pk)
@@ -101,6 +112,9 @@ class PreferenceAPIView(APIView):
             return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
+        if (closed := self.deadline_closed_response()):
+            return closed
+
         if isinstance(request.data, dict):
             serializer = PreferenceSerializer(data=request.data)
             logger.debug('Using PreferenceSerializer')
@@ -122,6 +136,9 @@ class PreferenceAPIView(APIView):
             return Response({'exception': str(ex)}, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, pk=None, *args, **kwargs):
+        if (closed := self.deadline_closed_response()):
+            return closed
+
         if isinstance(request.data, dict):
             if not pk and 'id' not in request.data:
                 # TODO Add regex to validate the presence of a enough data to construct the pk
@@ -169,6 +186,9 @@ class PreferenceAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk=None, *args, **kwargs):
+        if (closed := self.deadline_closed_response()):
+            return closed
+
         if not pk:
             return Response({'error': f'Missing id of preference to delete!'}, status=status.HTTP_400_BAD_REQUEST)
 

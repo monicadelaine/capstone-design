@@ -240,6 +240,38 @@ class TestPreferenceAPIView:
         assert response.status_code == status.HTTP_200_OK
         assert not Preference.objects.filter(pk=sample_preference.id).exists()
 
+    @pytest.fixture
+    def closed_semester(self, db):
+        now = timezone.now()
+        return Semester.objects.create(
+            semester=Semester.get_semester_by_date(now),
+            year=now.year,
+            assignment_date=now - timedelta(days=1),
+        )
+
+    def test_post_preference_after_deadline_returns_403(self, api_client, closed_semester, sample_student, sample_project):
+        url = reverse("project:preference-list")
+        payload = {"student": sample_student.id, "project": sample_project.id, "rank": Preference.RankChoices.ONE}
+        response = api_client.post(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Preference.objects.exists()
+
+    def test_patch_preference_after_deadline_returns_403(self, api_client, sample_preference, closed_semester):
+        url = reverse("project:preference-detail", kwargs={"pk": sample_preference.id})
+        response = api_client.patch(url, {"rank": Preference.RankChoices.THREE}, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        sample_preference.refresh_from_db()
+        assert sample_preference.rank == Preference.RankChoices.ONE
+
+    def test_delete_preference_after_deadline_returns_403(self, api_client, sample_preference, closed_semester):
+        url = reverse("project:preference-detail", kwargs={"pk": sample_preference.id})
+        response = api_client.delete(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Preference.objects.filter(pk=sample_preference.id).exists()
+
     def test_delete_preference_without_pk_returns_400(self, api_client):
         url = reverse("project:preference-list")
         response = api_client.delete(url)
