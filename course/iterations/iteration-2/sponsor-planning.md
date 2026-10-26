@@ -39,3 +39,9 @@ Deferred to Iteration 3, already on the board: server-side deadline enforcement 
 ## Decisions and follow-ups
 
 - Iteration 2 was planned five days before its deadline. The retrospective will record why and the Iteration 3 plan will be made in the first week of the iteration.
+
+## Planning snapshot
+
+Board view "03 - Iteration 2 Plan", captured 2026-10-25 (the board did not list the new Issues until GitHub's 10/22 incident cleared):
+
+![Iteration 2 plan](planning.png)
