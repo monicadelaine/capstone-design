@@ -1,12 +1,17 @@
-"""Role-based access rules for project endpoints.
+"""Role-based access rules for the project API (ADR-002, #43).
 
-Roles come from the Auth0 token (see ``user.authentication.UserWrapper``), not from
-the database. Any authenticated user may read projects. Only admins and sponsors may
-write, and a sponsor may only write projects under their own sponsor record.
+Admin and sponsor roles come from the Auth0 token (see ``user.authentication.UserWrapper``).
+A student is whoever is on the roster: their token email matches a Student row.
+
+- Projects: any authenticated user reads; admins, or sponsors on their own projects, write.
+- Preferences: a student reads and writes only their own; admins see all.
+- Assignments: admins see all; a student sees their own and their teammates'; a sponsor
+  sees those on their projects. Only admins write.
+- Semesters: any authenticated user reads; only admins write.
 """
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from user.models import Sponsor
+from user.models import Sponsor, Student
 
 ROLE_ADMIN = 'admin'
 ROLE_SPONSOR = 'sponsor'
@@ -50,3 +55,41 @@ class ProjectWritePermission(BasePermission):
             return True
         sponsor = sponsor_for_user(request.user)
         return sponsor is not None and obj.sponsor_id == sponsor.id
+
+
+def student_for_user(user):
+    """The Student record matching the authenticated user's email, or None.
+
+    Per ADR-002 a student is recognised by being on the roster (Student table), not by a
+    role claim the client could influence.
+    """
+    email = getattr(user, 'email', '') or ''
+    if not email:
+        return None
+    return Student.objects.filter(email__iexact=email).first()
+
+
+def owns_student_id(user, student_id):
+    """True when the user is an admin, or is the student with this id."""
+    if is_admin(user):
+        return True
+    student = student_for_user(user)
+    return student is not None and str(student.id) == str(student_id)
+
+
+class IsAdminRole(BasePermission):
+    """Only users carrying the admin role."""
+
+    message = 'Only admins may do this.'
+
+    def has_permission(self, request, view):
+        return is_admin(request.user)
+
+
+class AdminWriteOrReadOnly(BasePermission):
+    """Any authenticated user may read; only admins may write."""
+
+    message = 'Only admins may create or change this.'
+
+    def has_permission(self, request, view):
+        return request.method in SAFE_METHODS or is_admin(request.user)
