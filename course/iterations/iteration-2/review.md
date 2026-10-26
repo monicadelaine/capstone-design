@@ -67,7 +67,7 @@ No reply yet on the ranking rule or teammate preferences, first asked 9/22. The 
 
 - From the spike: before #51, decide how a solver proposal is stored until the admin approves it, and whether team size is exact or a range.
 - From #45: the interim Auth0 Action assigns roles by email domain; a roster lookup should replace it.
-- From #43: feedback and attachment endpoints need the same treatment (new Issue for Iteration 3).
+- From #43: feedback and attachment endpoints need the same treatment: #57, Iteration 3.
 
 ## Stand-ups
 
