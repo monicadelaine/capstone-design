@@ -37,6 +37,6 @@ Run from the repository root on the demo laptop. Everything below is on `main`.
 
 ## What was verified on 2026-10-26
 
-- Backend on a fresh database: migrations, `seed_demo` twice, and the API returning 403 without a login for semesters, preferences, assignments, projects, and email. Backend suite: 240 passed.
-- Solver script output as above.
-- **Not verified:** the logged-in browser flow in step 2, because it needs a real Auth0 login, and Docker could not start overnight (it was waiting for the macOS password). Rehearse step 2 once before class.
+- Full Docker stack on Margulan's laptop: migrations, `seed_demo`, frontend on :5173, admin on :8000.
+- Step 1: solver output as above. Step 3: the API returns "Authentication credentials were not provided" without a login, and the 16 selected tests pass. Step 4: 240 backend tests (on Postgres, in the container) and 36 frontend tests pass.
+- **Not verified:** the logged-in browser flow in step 2, because it needs a real Auth0 login. Rehearse it once before class.
