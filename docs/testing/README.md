@@ -2,11 +2,11 @@
 
 **Audience:** developers.
 
-Two automated suites exist, and both run inside the dev containers. Counts are as of 2026-09-24 and will grow.
+Two automated suites exist, and both run inside the dev containers. Counts are as of 2026-10-26 and will grow.
 
 | Suite | Runner | Where the tests live | Tests |
 |---|---|---|---|
-| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 203 |
+| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 240 |
 | Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 36 |
 
 ## Run everything with one command
@@ -40,13 +40,25 @@ docker compose -f docker-compose.dev.yml exec frontend npm run test:watch       
 docker compose -f docker-compose.dev.yml exec frontend npm run test:coverage                          # with coverage
 ```
 
+## Run the backend suite without Docker
+
+Useful when Docker is not running. Uses SQLite, like CI. From `backend/`:
+
+```
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+AUTH0_DOMAIN=test.auth0.com AUTH0_AUDIENCE=https://backend-api-capstone/ \
+DJANGO_ALLOWED_HOSTS=localhost SECRET_KEY=test .venv/bin/pytest -q
+```
+
+`.venv/` is already git-ignored.
+
 ## What is covered
 
 **Backend**, by Django app:
 
-- `project`: model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences, assignments, and feedback; admin actions for project status, semester membership, and assigning students to projects.
+- `project`: model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences (a student sees and changes only their own), assignments (student, teammate, and sponsor visibility; admin-only writes), semesters (login to read, admin to write), and feedback; the `seed_demo` command; admin actions for project status, semester membership, and assigning students to projects.
 - `user`: Sponsor and Student models and validators (phone, CWID); serializers; the sponsor and student endpoints and the profile endpoint; sponsor admin email actions.
-- `emails`: email serializers; the send endpoints; the email client, template rendering, and EML export helpers; the custom admin views.
+- `emails`: email serializers; the send endpoints, including admin-only access; the email client, template rendering, and EML export helpers; the custom admin views.
 
 **Frontend**:
 
