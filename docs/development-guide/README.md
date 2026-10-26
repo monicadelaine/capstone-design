@@ -64,8 +64,8 @@ SQL_PASSWORD=capstone_dev_password
 SQL_HOST=db
 SQL_PORT=5432
 
-AUTH0_DOMAIN=dev-qjyd077ykn3qqq7v.us.auth0.com   # prior team's tenant; to be replaced per ADR-002
-AUTH0_CLIENT_ID=WMPr5zJLNFI0j9A8iUymDfAsP2mUXsn3
+AUTH0_DOMAIN=<team tenant domain>      # see auth0-setup.md
+AUTH0_CLIENT_ID=<team tenant client id>
 AUTH0_AUDIENCE=https://backend-api-capstone/
 
 MINIO_ROOT_USER=minioadmin
@@ -96,8 +96,8 @@ POSTGRES_PASSWORD=capstone_dev_password
 **Frontend: frontend/.env.dev.local**
 
 ```
-VITE_AUTH0_DOMAIN=dev-qjyd077ykn3qqq7v.us.auth0.com   # prior team's tenant; to be replaced per ADR-002
-VITE_AUTH0_CLIENT_ID=WMPr5zJLNFI0j9A8iUymDfAsP2mUXsn3
+VITE_AUTH0_DOMAIN=<team tenant domain>      # see auth0-setup.md
+VITE_AUTH0_CLIENT_ID=<team tenant client id>
 VITE_AUTH0_AUDIENCE=https://backend-api-capstone/
 ```
 Do not commit `.env.dev`, `.env.dev.db`, `frontend/.env.dev.local`, or any production `.env` file. The repository is already configured to ignore these files.
