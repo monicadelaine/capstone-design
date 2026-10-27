@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 import pytest
-from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -9,22 +8,37 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from project.models import Assignment, Feedback, Preference, Project, Semester
+from user.authentication import UserWrapper
 from user.models import Sponsor, Student
+
+
+def make_client(email, roles):
+    """An API client authenticated as an Auth0 user with the given email and roles."""
+    client = APIClient()
+    client.force_authenticate(user=UserWrapper({
+        'email': email,
+        'sub': f'auth0|{email}',
+        'roles': roles,
+    }))
+    return client
 
 
 @pytest.fixture
 def api_client(db):
-    """Create an authenticated API client for testing."""
-    client = APIClient()
-    # Create a test user for authentication
-    user = User.objects.create_user(
-        username='testuser',
-        email='testuser@example.com',
-        password='testpass123'
-    )
-    # Force authenticate the client with the test user
-    client.force_authenticate(user=user)
-    return client
+    """Admin-role client. Admins may read and write everything."""
+    return make_client('admin@example.com', ['admin'])
+
+
+@pytest.fixture
+def sponsor_client(db, sample_sponsor):
+    """Client logged in as sample_sponsor with the sponsor role."""
+    return make_client(sample_sponsor.email, ['sponsor'])
+
+
+@pytest.fixture
+def student_client(db, sample_student):
+    """Client logged in as sample_student with the student role."""
+    return make_client(sample_student.email, ['student'])
 
 
 @pytest.fixture
@@ -239,6 +253,38 @@ class TestPreferenceAPIView:
         # converted to a 200 because the HTML form is appended, and a 204 does not allow content
         assert response.status_code == status.HTTP_200_OK
         assert not Preference.objects.filter(pk=sample_preference.id).exists()
+
+    @pytest.fixture
+    def closed_semester(self, db):
+        now = timezone.now()
+        return Semester.objects.create(
+            semester=Semester.get_semester_by_date(now),
+            year=now.year,
+            assignment_date=now - timedelta(days=1),
+        )
+
+    def test_post_preference_after_deadline_returns_403(self, api_client, closed_semester, sample_student, sample_project):
+        url = reverse("project:preference-list")
+        payload = {"student": sample_student.id, "project": sample_project.id, "rank": Preference.RankChoices.ONE}
+        response = api_client.post(url, payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Preference.objects.exists()
+
+    def test_patch_preference_after_deadline_returns_403(self, api_client, sample_preference, closed_semester):
+        url = reverse("project:preference-detail", kwargs={"pk": sample_preference.id})
+        response = api_client.patch(url, {"rank": Preference.RankChoices.THREE}, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        sample_preference.refresh_from_db()
+        assert sample_preference.rank == Preference.RankChoices.ONE
+
+    def test_delete_preference_after_deadline_returns_403(self, api_client, sample_preference, closed_semester):
+        url = reverse("project:preference-detail", kwargs={"pk": sample_preference.id})
+        response = api_client.delete(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Preference.objects.filter(pk=sample_preference.id).exists()
 
     def test_delete_preference_without_pk_returns_400(self, api_client):
         url = reverse("project:preference-list")
@@ -521,3 +567,325 @@ class TestFeedbackViewSet:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["semester"] == sample_semester.id
+
+
+@pytest.mark.django_db
+class TestProjectWriteRules:
+    """Who may create, change, and delete projects, and under which sponsor."""
+
+    @staticmethod
+    def payload(sponsor, name="Sponsor Project"):
+        return {
+            "name": name,
+            "description": "Submitted through the API by a sponsor.",
+            "sponsor": sponsor.id,
+            "sponsor_availability": "Weekday mornings",
+        }
+
+    # Reads stay open to every authenticated role.
+
+    def test_student_can_read_a_project(self, student_client, sample_project):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = student_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == sample_project.id
+
+    # Only sponsors and admins may write.
+
+    def test_student_cannot_create_project(self, student_client, sample_sponsor):
+        url = reverse("project:project-list")
+        response = student_client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Project.objects.filter(name="Sponsor Project").exists()
+
+    def test_user_without_role_cannot_create_project(self, sample_sponsor):
+        client = make_client("nobody@example.com", [])
+        url = reverse("project:project-list")
+        response = client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_student_cannot_delete_project(self, student_client, sample_project):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = student_client.delete(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Project.objects.filter(id=sample_project.id).exists()
+
+    # A sponsor may only act under their own sponsor record.
+
+    def test_sponsor_creates_own_project(self, sponsor_client, sample_sponsor):
+        url = reverse("project:project-list")
+        response = sponsor_client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        project = Project.objects.get(name="Sponsor Project")
+        assert project.sponsor == sample_sponsor
+        assert project.status == Project.StatusChoices.PENDING
+
+    def test_sponsor_cannot_create_for_another_sponsor(self, sponsor_client, second_sponsor):
+        url = reverse("project:project-list")
+        response = sponsor_client.post(url, self.payload(second_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "own sponsor account" in str(response.data["sponsor"])
+        assert not Project.objects.filter(name="Sponsor Project").exists()
+
+    def test_sponsor_without_profile_cannot_create(self, sample_sponsor):
+        client = make_client("ghost@example.com", ["sponsor"])
+        url = reverse("project:project-list")
+        response = client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "sponsor" in response.data
+
+    def test_sponsor_updates_own_project(self, sponsor_client, sample_project):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = sponsor_client.patch(url, {"description": "Updated by owner"}, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        sample_project.refresh_from_db()
+        assert sample_project.description == "Updated by owner"
+
+    def test_sponsor_cannot_update_another_sponsors_project(self, sponsor_client, second_sponsor):
+        other = Project.objects.create(name="Not Mine", sponsor=second_sponsor)
+        url = reverse("project:project-detail", args=[other.id])
+        response = sponsor_client.patch(url, {"description": "Tampered"}, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        other.refresh_from_db()
+        assert other.description is None
+
+    def test_sponsor_cannot_move_project_to_another_sponsor(self, sponsor_client, sample_project, second_sponsor):
+        url = reverse("project:project-detail", args=[sample_project.id])
+        response = sponsor_client.patch(url, {"sponsor": second_sponsor.id}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        sample_project.refresh_from_db()
+        assert sample_project.sponsor_id != second_sponsor.id
+
+    def test_sponsor_cannot_delete_another_sponsors_project(self, sponsor_client, second_sponsor):
+        other = Project.objects.create(name="Not Mine", sponsor=second_sponsor)
+        url = reverse("project:project-detail", args=[other.id])
+        response = sponsor_client.delete(url)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Project.objects.filter(id=other.id).exists()
+
+    # The projects_allowed limit is enforced on the server.
+
+    def test_sponsor_project_limit_enforced(self, sponsor_client, sample_sponsor):
+        sample_sponsor.projects_allowed = 1
+        sample_sponsor.save()
+        url = reverse("project:project-list")
+
+        first = sponsor_client.post(url, self.payload(sample_sponsor, "First"), format="json")
+        second = sponsor_client.post(url, self.payload(sample_sponsor, "Second"), format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_400_BAD_REQUEST
+        assert "maximum of 1 projects" in str(second.data["sponsor"])
+        assert Project.objects.filter(sponsor=sample_sponsor).count() == 1
+
+    def test_admin_bypasses_project_limit(self, api_client, sample_sponsor):
+        sample_sponsor.projects_allowed = 0
+        sample_sponsor.save()
+        url = reverse("project:project-list")
+        response = api_client.post(url, self.payload(sample_sponsor), format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    # Project names are unique per sponsor, with a readable message.
+
+    def test_duplicate_name_for_same_sponsor_rejected(self, sponsor_client, sample_project):
+        url = reverse("project:project-list")
+        response = sponsor_client.post(
+            url, self.payload(sample_project.sponsor, sample_project.name), format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "already have a project with this name" in str(response.data)
+
+    def test_same_name_allowed_for_different_sponsor(self, api_client, sample_project, second_sponsor):
+        url = reverse("project:project-list")
+        response = api_client.post(
+            url, self.payload(second_sponsor, sample_project.name), format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.fixture
+def other_student(db):
+    return Student.objects.create(
+        cwid="87654321",
+        email="other.student@example.com",
+        first_name="Omar",
+        last_name="Other",
+        class_code=Student.Class.SENIOR,
+        major_code="CS",
+    )
+
+
+@pytest.fixture
+def other_preference(db, other_student, sample_project):
+    return Preference.objects.create(
+        student=other_student, project=sample_project, rank=Preference.RankChoices.TWO,
+    )
+
+
+@pytest.mark.django_db
+class TestPreferenceOwnership:
+    """SECURITY-01 (#43) / TEST-02 (#49): a student sees and changes only their own preferences."""
+
+    def test_student_lists_only_own_preferences(self, student_client, sample_preference, other_preference):
+        response = student_client.get(reverse("project:preference-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [p["id"] for p in response.data] == [sample_preference.id]
+
+    def test_student_cannot_read_another_students_preference(self, student_client, other_preference):
+        url = reverse("project:preference-detail", kwargs={"pk": other_preference.id})
+        assert student_client.get(url).status_code == status.HTTP_404_NOT_FOUND
+
+    def test_student_creates_own_preference(self, student_client, sample_student, sample_project):
+        payload = {"student": sample_student.id, "project": sample_project.id, "rank": 1}
+        response = student_client.post(reverse("project:preference-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_student_cannot_create_preference_for_another_student(self, student_client, other_student, sample_project):
+        payload = {"student": other_student.id, "project": sample_project.id, "rank": 1}
+        response = student_client.post(reverse("project:preference-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Preference.objects.exists()
+
+    def test_student_cannot_slip_another_student_into_a_bulk_create(
+            self, student_client, sample_student, other_student, sample_project):
+        payload = [
+            {"student": sample_student.id, "project": sample_project.id, "rank": 1},
+            {"student": other_student.id, "project": sample_project.id, "rank": 1},
+        ]
+        response = student_client.post(reverse("project:preference-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Preference.objects.exists()
+
+    def test_student_cannot_change_another_students_preference(self, student_client, other_preference):
+        url = reverse("project:preference-detail", kwargs={"pk": other_preference.id})
+        response = student_client.patch(url, {"rank": 1}, format="json")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        other_preference.refresh_from_db()
+        assert other_preference.rank == Preference.RankChoices.TWO
+
+    def test_student_cannot_bulk_change_another_students_preference(self, student_client, other_preference):
+        payload = [{"id": other_preference.id, "rank": 1}]
+        response = student_client.patch(reverse("project:preference-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_student_cannot_delete_another_students_preference(self, student_client, other_preference):
+        url = reverse("project:preference-detail", kwargs={"pk": other_preference.id})
+
+        assert student_client.delete(url).status_code == status.HTTP_404_NOT_FOUND
+        assert Preference.objects.filter(pk=other_preference.id).exists()
+
+    def test_sponsor_sees_no_preferences(self, sponsor_client, sample_preference):
+        response = sponsor_client.get(reverse("project:preference-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    def test_admin_sees_all_preferences(self, api_client, sample_preference, other_preference):
+        response = api_client.get(reverse("project:preference-list"))
+        assert len(response.data) == 2
+
+
+@pytest.mark.django_db
+class TestAssignmentAccess:
+    """SECURITY-01 (#43) / TEST-02 (#49): who may see and create assignments."""
+
+    @pytest.fixture
+    def second_project(self, second_sponsor):
+        return Project.objects.create(name="Other Project", sponsor=second_sponsor)
+
+    @pytest.fixture
+    def outsider(self, db):
+        return Student.objects.create(
+            cwid="11112222", email="outsider@example.com", first_name="Ann", last_name="Out",
+            class_code=Student.Class.SENIOR, major_code="CS",
+        )
+
+    @pytest.fixture
+    def assignments(self, sample_assignment, other_student, outsider, sample_semester, sample_project, second_project):
+        teammate = Assignment.objects.create(student=other_student, semester=sample_semester, project=sample_project)
+        stranger = Assignment.objects.create(student=outsider, semester=sample_semester, project=second_project)
+        return sample_assignment, teammate, stranger
+
+    def test_student_sees_own_and_teammates_assignments_only(self, student_client, assignments):
+        mine, teammate, stranger = assignments
+        response = student_client.get(reverse("project:assignment-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert sorted(a["id"] for a in response.data) == sorted([mine.id, teammate.id])
+
+    def test_student_cannot_read_a_strangers_assignment(self, student_client, assignments):
+        stranger = assignments[2]
+        url = reverse("project:assignment-detail", args=[stranger.id])
+        assert student_client.get(url).status_code == status.HTTP_404_NOT_FOUND
+
+    def test_sponsor_sees_only_assignments_on_own_projects(self, sponsor_client, assignments):
+        mine, teammate, stranger = assignments
+        response = sponsor_client.get(reverse("project:assignment-list"))
+
+        assert sorted(a["id"] for a in response.data) == sorted([mine.id, teammate.id])
+
+    def test_sponsor_cannot_create_assignment(self, sponsor_client, sample_student, sample_semester, sample_project):
+        payload = {"student": sample_student.id, "semester": sample_semester.id, "project": sample_project.id}
+        response = sponsor_client.post(reverse("project:assignment-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Assignment.objects.exists()
+
+    def test_student_cannot_create_assignment(self, student_client, sample_student, sample_semester, sample_project):
+        payload = {"student": sample_student.id, "semester": sample_semester.id, "project": sample_project.id}
+        response = student_client.post(reverse("project:assignment-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_student_cannot_delete_own_assignment(self, student_client, sample_assignment):
+        url = reverse("project:assignment-detail", args=[sample_assignment.id])
+
+        assert student_client.delete(url).status_code == status.HTTP_403_FORBIDDEN
+        assert Assignment.objects.filter(pk=sample_assignment.id).exists()
+
+
+@pytest.mark.django_db
+class TestSemesterAccess:
+    """SECURITY-01 (#43) / TEST-02 (#49): semesters need a login to read and the admin role to write."""
+
+    def test_anonymous_cannot_list_semesters(self, sample_semester):
+        response = APIClient().get(reverse("project:semester-list"))
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_anonymous_cannot_read_current_semester(self):
+        response = APIClient().get(reverse("project:semester-current"))
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_student_reads_semesters(self, student_client, sample_semester):
+        assert student_client.get(reverse("project:semester-list")).status_code == status.HTTP_200_OK
+
+    def test_student_cannot_create_semester(self, student_client):
+        payload = {"semester": "Fall", "year": 2030, "assignment_date": timezone.now().isoformat()}
+        response = student_client.post(reverse("project:semester-list"), payload, format="json")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert not Semester.objects.exists()
+
+    def test_sponsor_cannot_delete_semester(self, sponsor_client, sample_semester):
+        url = reverse("project:semester-detail", args=[sample_semester.id])
+        assert sponsor_client.delete(url).status_code == status.HTTP_403_FORBIDDEN

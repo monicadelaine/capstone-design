@@ -113,7 +113,8 @@ describe('Sidebar', () => {
         await navItems[1].trigger('click')
         expect(mocks.pushMock).toHaveBeenCalledWith('/sponsor/submit')
 
-        await wrapper.find('.logout-link').trigger('click')
+        const logoutItem = wrapper.findAll('.nav-item').find((item) => item.text() === 'Logout')
+        await logoutItem.trigger('click')
         expect(wrapper.emitted('logout')).toHaveLength(1)
     })
 })

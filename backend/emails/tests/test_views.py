@@ -1,21 +1,40 @@
 import pytest
-from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from user.authentication import UserWrapper
+
+
+def make_client(roles):
+    client = APIClient()
+    client.force_authenticate(user=UserWrapper({"email": "user@example.com", "sub": "auth0|user", "roles": roles}))
+    return client
+
 
 @pytest.fixture
 def api_client(db):
-    """Create an authenticated API client for testing."""
-    client = APIClient()
-    user = User.objects.create_user(
-        username="testuser",
-        email="testuser@example.com",
-        password="testpass123",
-    )
-    client.force_authenticate(user=user)
-    return client
+    """Admin-role client. Email endpoints are admin-only (#43)."""
+    return make_client(["admin"])
+
+
+EMAIL_URLS = ["emails:send_email", "emails:send_sponsor_outreach", "emails:send_project_presentation"]
+
+
+@pytest.mark.django_db
+class TestEmailAccess:
+    """SECURITY-01 (#43) / TEST-02 (#49): only admins may send email."""
+
+    @pytest.mark.parametrize("name", EMAIL_URLS)
+    def test_anonymous_is_blocked(self, name):
+        response = APIClient().post(reverse(name), {}, format="json")
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    @pytest.mark.parametrize("roles", [["student"], ["sponsor"], []])
+    @pytest.mark.parametrize("name", EMAIL_URLS)
+    def test_non_admin_is_blocked(self, name, roles):
+        response = make_client(roles).post(reverse(name), {}, format="json")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db

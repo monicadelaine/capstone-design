@@ -213,7 +213,7 @@ const submitRankings = async () => {
     }
 
     // If user had no prefs at all, POST everything (preserves original behavior)
-    if (!hasRanked) {
+    if (!hasRanked.value) {
       for (const item of toCreate) {
         await apiService.client.post('/preferences/', item);
         existingPrefProjectIds.value.add(String(item.project));
@@ -286,7 +286,7 @@ const submitRankings = async () => {
     </div>
 
     <div class="card">
-    <p v-if="isDeadlinePast">Select exactly 5 projects for each priority level.</p>
+    <p v-if="!isDeadlinePast">Select exactly 5 projects for each priority level.</p>
 
     <div v-if="loading" class="status-msg">Loading projects...</div>
     <div v-else-if="error" class="status-msg error">{{ error }}</div>

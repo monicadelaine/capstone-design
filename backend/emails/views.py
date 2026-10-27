@@ -1,12 +1,20 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from emails.utils import email_client
 from emails.serializers import EmailSerializer
 from project.models import Attachment
+from project.permissions import IsAdminRole
+from user.authentication import Auth0Authentication
+
+# Sending and exporting email is an admin action (#43).
+ADMIN_ONLY = [IsAuthenticated, IsAdminRole]
 
 
 @api_view(['GET', 'POST'])
+@authentication_classes([Auth0Authentication])
+@permission_classes(ADMIN_ONLY)
 def send_email(request):
     if request.method == 'GET':
         serializer = EmailSerializer()
@@ -37,6 +45,8 @@ def send_email(request):
 
 
 @api_view(['POST'])
+@authentication_classes([Auth0Authentication])
+@permission_classes(ADMIN_ONLY)
 def send_sponsor_outreach(request):
     recipients = request.data.get('recipients')
     semester = request.data.get('semester', 'spring')
@@ -68,6 +78,8 @@ def send_sponsor_outreach(request):
 
 
 @api_view(['POST'])
+@authentication_classes([Auth0Authentication])
+@permission_classes(ADMIN_ONLY)
 def send_project_presentation(request):
     required_fields = ['recipients', 'date', 'time', 'project_name',
                        'project_description', 'contact_name', 'contact_email', 'zoom_details']
@@ -106,6 +118,8 @@ def send_project_presentation(request):
 
 
 @api_view(['GET'])
+@authentication_classes([Auth0Authentication])
+@permission_classes(ADMIN_ONLY)
 def export_sponsor_outreach(request):
     semester = request.query_params.get('semester', 'spring')
     collection_date = request.query_params.get('collection_date', 'TBD')
@@ -126,6 +140,8 @@ def export_sponsor_outreach(request):
 
 
 @api_view(['GET'])
+@authentication_classes([Auth0Authentication])
+@permission_classes(ADMIN_ONLY)
 def export_project_presentation(request):
     context = {
         'date': request.query_params.get('date', 'TBD'),

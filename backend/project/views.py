@@ -1,8 +1,10 @@
 import datetime
 import logging
 
+from django.db.models import Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -13,6 +15,14 @@ from rest_framework.views import APIView
 from user.authentication import Auth0Authentication
 
 from .models import Assignment, Attachment, Feedback, Preference, Project, Semester
+from .permissions import (
+    AdminWriteOrReadOnly,
+    ProjectWritePermission,
+    is_admin,
+    owns_student_id,
+    sponsor_for_user,
+    student_for_user,
+)
 from .serializers import (
     AssignmentSerializer,
     AttachmentSerializer,
@@ -33,7 +43,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
     filterset_fields = ['name', 'sponsor', 'status']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    # Reads: any authenticated user. Writes: admins, or sponsors on their own projects.
+    permission_classes = [IsAuthenticated, ProjectWritePermission]
 
     # TODO Add error handling if a semester DNE for the current date
     def list(self, request, *args, **kwargs):
@@ -77,6 +88,9 @@ class SemesterViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['semester', 'year']
 
+    authentication_classes = [Auth0Authentication]
+    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
+
     @action(detail=False, methods=['get'])
     def current(self, request):
         """Returns a semester based on the current date"""
@@ -90,17 +104,48 @@ class PreferenceAPIView(APIView):
     authentication_classes = [Auth0Authentication]
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def deadline_closed_response():
+        """Returns a 403 response if the current semester's preference deadline has passed, otherwise None"""
+        now = timezone.now()
+        semester = Semester.objects.filter(semester=Semester.get_semester_by_date(now), year=now.year).first()
+        if semester and now > semester.assignment_date:
+            return Response({'error': 'The preference deadline has passed. Preferences can no longer be changed.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        return None
+
+    FORBIDDEN = {'error': 'You may only view or change your own preferences.'}
+
+    @staticmethod
+    def visible_preferences(user):
+        """Admins see every preference; a student sees only their own; anyone else sees none."""
+        if is_admin(user):
+            return Preference.objects.all()
+        student = student_for_user(user)
+        return Preference.objects.filter(student=student) if student else Preference.objects.none()
+
+    @staticmethod
+    def items(data):
+        return data if isinstance(data, list) else [data] if isinstance(data, dict) else []
+
     def get(self, request, pk=None, format=None):
+        preferences = self.visible_preferences(request.user)
         if pk:
-            preference = get_object_or_404(Preference, pk=pk)
+            # 404 rather than 403, so another student's preference ids are not confirmed to exist
+            preference = get_object_or_404(preferences, pk=pk)
             serializer = PreferenceSerializer(preference)
             return Response(serializer.data)
         else:
-            preferences = Preference.objects.all()
             serializer = PreferenceSerializer(preferences, many=True)
             return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
+        if (closed := self.deadline_closed_response()):
+            return closed
+
+        if not all(owns_student_id(request.user, item.get('student')) for item in self.items(request.data)):
+            return Response(self.FORBIDDEN, status=status.HTTP_403_FORBIDDEN)
+
         if isinstance(request.data, dict):
             serializer = PreferenceSerializer(data=request.data)
             logger.debug('Using PreferenceSerializer')
@@ -122,6 +167,9 @@ class PreferenceAPIView(APIView):
             return Response({'exception': str(ex)}, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, pk=None, *args, **kwargs):
+        if (closed := self.deadline_closed_response()):
+            return closed
+
         if isinstance(request.data, dict):
             if not pk and 'id' not in request.data:
                 # TODO Add regex to validate the presence of a enough data to construct the pk
@@ -135,7 +183,9 @@ class PreferenceAPIView(APIView):
             if not pk:
                 pk = request.data['id']
 
-            preference = get_object_or_404(Preference, pk=pk)
+            preference = get_object_or_404(self.visible_preferences(request.user), pk=pk)
+            if 'student' in request.data and not owns_student_id(request.user, request.data['student']):
+                return Response(self.FORBIDDEN, status=status.HTTP_403_FORBIDDEN)
             serializer = PreferenceSerializer(preference, data=request.data, partial=True)
 
         elif isinstance(request.data, list):
@@ -149,7 +199,7 @@ class PreferenceAPIView(APIView):
                     preference['id'] = Preference.generate_id(
                         self=None, student_id=preference['student'], project_id=preference['project'])
 
-                updated = get_object_or_404(Preference, pk=preference['id'])
+                updated = get_object_or_404(self.visible_preferences(request.user), pk=preference['id'])
                 updated.rank = preference['rank']
                 preferences.append(updated)
 
@@ -169,10 +219,13 @@ class PreferenceAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk=None, *args, **kwargs):
+        if (closed := self.deadline_closed_response()):
+            return closed
+
         if not pk:
             return Response({'error': f'Missing id of preference to delete!'}, status=status.HTTP_400_BAD_REQUEST)
 
-        preference = get_object_or_404(Preference, pk=pk)
+        preference = get_object_or_404(self.visible_preferences(request.user), pk=pk)
         preference.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -185,7 +238,23 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['semester', 'student', 'project']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
+
+    def get_queryset(self):
+        """Admins see all. A student sees their own assignment and their teammates' (the
+        assignment card lists teammates). A sponsor sees assignments on their projects."""
+        user = self.request.user
+        if is_admin(user):
+            return Assignment.objects.all()
+        visible = Q(pk__in=[])
+        student = student_for_user(user)
+        if student:
+            for semester_id, project_id in Assignment.objects.filter(student=student).values_list('semester', 'project'):
+                visible |= Q(semester_id=semester_id, project_id=project_id)
+        sponsor = sponsor_for_user(user)
+        if sponsor:
+            visible |= Q(project__sponsor=sponsor)
+        return Assignment.objects.filter(visible)
 
 
 class FeedbackViewSet(viewsets.ModelViewSet):
