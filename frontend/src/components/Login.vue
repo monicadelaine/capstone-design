@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth0 } from '@auth0/auth0-vue';
 
