@@ -23,7 +23,7 @@ let tabulator = null; // Hold Tabulator instance
 // 2. Define the asynchronous fetching function
 const fetchData = async () => {
   try {
-    const response = await axios.get('http://localhost:8000/api/v1/sponsors/?format=json'); // Example API endpoint
+    const response = await axios.get('/api/v1/sponsors/?format=json'); // Example API endpoint
     posts.value = response.data; // Axios automatically parses JSON into the .data property
   } catch (err) {
     error.value = err;
