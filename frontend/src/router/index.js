@@ -108,7 +108,9 @@ router.beforeEach(async (to, from, next) => {
       const userRole = getUserRole(user.value);
 
       if (!userRole) {
-        next({ path: '/?error=no_role' });
+        // Already showing the no-role error: render it. Redirecting again loops forever.
+        if (to.query.error === 'no_role') next();
+        else next({ path: '/', query: { error: 'no_role' } });
         return;
       }
 
@@ -163,7 +165,7 @@ router.beforeEach(async (to, from, next) => {
   const userRole = getUserRole(user.value);
 
   if (!userRole) {
-    next({ path: '/?error=no_role' });
+    next({ path: '/', query: { error: 'no_role' } });
     return;
   }
 
