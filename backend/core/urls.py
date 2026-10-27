@@ -1,3 +1,5 @@
+import os
+
 """
 URL configuration for core project.
 
@@ -12,19 +14,22 @@ Class-based views
     2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
 Including another URLconf
     1. Import the include() function: from django.urls import include, path
+from .health import health_check
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
 from django.urls import include, path
+from .health import health_check
 
 API_PREFIX = 'api/v1/'
 
 # FIXME Update site_url for production
-admin.site.site_url = 'http://127.0.0.1:5173'
+admin.site.site_url = os.environ.get('APP_BASE_URL', 'http://127.0.0.1:5173')
 admin.site.site_header = 'Projects Portal'
 admin.site.site_title = 'UA Computer Science Senior Design'
 
 urlpatterns = [
+    path(f'{API_PREFIX}health/', health_check, name='health_check'),
     path('admin/action-forms/', include('django_admin_action_forms.urls')),
     path('admin/', admin.site.urls),
 

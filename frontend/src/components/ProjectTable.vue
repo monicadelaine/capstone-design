@@ -17,7 +17,7 @@ const fetchData = async () => {
   loading.value = true;
   error.value = null;
   try {
-    const response = await axios.get('http://localhost:8000/api/v1/projects/?format=json');
+    const response = await axios.get('/api/v1/projects/?format=json');
     posts.value = response.data;
   } catch (err) {
     error.value = err;

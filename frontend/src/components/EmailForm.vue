@@ -28,7 +28,7 @@ const sendEmail = async () => {
       payload.html_message = message.value;
     }
 
-    const response = await fetch('http://localhost:8000/api/v1/emails/send', {
+    const response = await fetch('/api/v1/emails/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
