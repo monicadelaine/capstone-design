@@ -1,17 +1,17 @@
-# TODO Pick package versions to use [#3]
-boto3
-django
+# Pinned direct dependencies (SETUP-08, #53). Python 3.11, matching backend/Dockerfile.
+# To upgrade: change a version here, rebuild the backend image, and run the tests.
+boto3==1.43.119
+django==5.2.18
 django-admin-action-forms==2.2.1
-django-cors-headers
-django-filter
-django-import-export
-django-storages
-djangorestframework
-psycopg[binary,pool]
-pytest
-pytest-cov
-pytest-django
-python-jose[cryptography]
-requests
-gunicorn
-django-storages[google]
+django-cors-headers==4.9.0
+django-filter==26.2
+django-import-export==4.4.3
+django-storages[google]==1.14.6
+djangorestframework==3.18.3
+gunicorn==26.2.0
+psycopg[binary,pool]==3.3.6
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-django==4.14.0
+python-jose[cryptography]==3.5.0
+requests==2.34.2
