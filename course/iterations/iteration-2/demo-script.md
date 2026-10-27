@@ -39,4 +39,4 @@ Run from the repository root on the demo laptop. Everything below is on `main`.
 
 - Full Docker stack on Margulan's laptop: migrations, `seed_demo`, frontend on :5173, admin on :8000.
 - Step 1: solver output as above. Step 3: the API returns "Authentication credentials were not provided" without a login, and the 16 selected tests pass. Step 4: 240 backend tests (on Postgres, in the container) and 36 frontend tests pass.
-- **Not verified:** the logged-in browser flow in step 2, because it needs a real Auth0 login. Rehearse it once before class.
+- Step 2 on the team's own Auth0 tenant: Margulan signed up, logged in, and saved 15 preferences (5/5/5), confirmed in the database.

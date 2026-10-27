@@ -18,6 +18,7 @@ The code reads two custom token claims with a fixed prefix: `https://backend-api
    - Allowed Logout URLs: `http://localhost:5173`
    - Allowed Web Origins: `http://localhost:5173`
    - Save. Copy the **Domain** and **Client ID**.
+   - Then open Applications > APIs > Capstone Design Manager API > **Application Access** and authorize this application for **User Access**. New tenants block it by default, and login fails with "Client ... is not authorized to access resource server".
 4. **Add the claims Action.** Actions > Library > Create Action > Build from scratch. Trigger: Login / Post Login. Paste the code below, Deploy, then add it to the Post Login flow under Actions > Triggers.
 
    ```js

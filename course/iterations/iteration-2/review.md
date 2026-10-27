@@ -7,7 +7,7 @@
 
 Close the security gaps inherited from v1 so that a student can only see and change their own data, finish the student ranking form, and establish whether Google OR-Tools can drive the assignment feature the sponsor asked for.
 
-**Result:** all three parts met. One setup item (#12) and one carried setup item (#45) remain open.
+**Result:** all three parts met. Two setup items remain open: #12 (teammate sign-offs) and #45 (teammates on the new login tenant).
 
 Plan and open sponsor questions: [sponsor-planning.md](sponsor-planning.md).
 
@@ -35,7 +35,7 @@ Live board: https://github.com/users/mbaizhakyp/projects/1
 | #44 | Margulan | OR-Tools evaluation spike | Done | [or-tools-evaluation.md](../../../docs/investigations/or-tools-evaluation.md) |
 | #46 | Margulan | Sponsor planning record and snapshot | Done | [sponsor-planning.md](sponsor-planning.md) |
 | #12 | Noland | Dev environment sign-off (carried) | **Open** | No teammate has posted "runs on mine" yet |
-| #45 | Margulan | Team-owned Auth0 tenant | **Open** | Setup guide written ([auth0-setup.md](../../../docs/development-guide/auth0-setup.md)); tenant not created |
+| #45 | Margulan | Team-owned Auth0 tenant | **Open** | Team tenant created 10/26 and verified on one machine (login and saving preferences); teammates' logins and sponsor invite pending |
 | #48 | Jayden | Board views and snapshots | **Open** | Snapshots committed; the Team Contributions view is not yet grouped by person |
 | #47 | Margulan | This package | Open until the tag is pushed | this folder |
 

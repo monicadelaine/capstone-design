@@ -43,4 +43,4 @@
 | Review PR #55 and comment on #43 / #49 | Noland, Gaurav | 2026-10-31 | Iteration 3 retrospective |
 | Post "runs on mine" on #12 so it can close | all | 2026-10-31 | Iteration 3 retrospective |
 | Sponsor answers on ranking rule and teammate preferences, in person if email stays unanswered | Margulan | 2026-10-31 | Iteration 3 retrospective |
-| Create the Auth0 tenant and get every teammate logged in (#45) | Margulan | 2026-10-31 | Iteration 3 retrospective |
+| Every teammate logged in on the new Auth0 tenant; sponsor invited (#45) | all; Margulan | 2026-10-31 | Iteration 3 retrospective |
