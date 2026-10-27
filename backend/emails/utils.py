@@ -71,11 +71,12 @@ class EmailClient:
             smtp_password=smtp_password,
         )
 
-    def send_sponsor_outreach(self, recipient_list, semester='spring', collection_date='Spring 2025 (1/14/25)',
+    def send_sponsor_outreach(self, recipient_list, semester='spring', collection_date='TBD',
                               from_email=None, smtp_host=None, smtp_port=None,
-                              smtp_username=None, smtp_password=None):
+                              smtp_username=None, smtp_password=None, year=None):
+        year = year or settings.CAPSTONE_YEAR
         return self.send_templated_email(
-            subject=f"UA CS Capstone Project Opportunity - {semester.capitalize()} 2025",
+            subject=f"UA CS Capstone Project Opportunity - {semester.capitalize()} {year}",
             recipient_list=recipient_list,
             template_name="sponsor_outreach",
             context={

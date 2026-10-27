@@ -118,7 +118,8 @@ class TestEmailClient:
         assert sent_calls[0]["html_message"] == "<p>Hello <strong>World</strong></p>"
         assert sent_calls[0]["message"] == "Hello World"
 
-    def test_send_sponsor_outreach_uses_expected_subject(self, monkeypatch):
+    def test_send_sponsor_outreach_uses_expected_subject(self, monkeypatch, settings):
+        settings.CAPSTONE_YEAR = 2026
         client = EmailClient()
         calls = []
 
@@ -135,9 +136,19 @@ class TestEmailClient:
         )
 
         assert len(calls) == 1
-        assert calls[0]["subject"] == "UA CS Capstone Project Opportunity - Fall 2025"
+        assert calls[0]["subject"] == "UA CS Capstone Project Opportunity - Fall 2026"
         assert calls[0]["template_name"] == "sponsor_outreach"
         assert calls[0]["context"]["semester"] == "fall"
+
+    def test_send_sponsor_outreach_year_overrides_setting(self, monkeypatch, settings):
+        settings.CAPSTONE_YEAR = 2026
+        client = EmailClient()
+        calls = []
+        monkeypatch.setattr(client, "send_templated_email", lambda **kwargs: calls.append(kwargs))
+
+        client.send_sponsor_outreach(recipient_list=["sponsor@example.com"], semester="spring", year=2027)
+
+        assert calls[0]["subject"] == "UA CS Capstone Project Opportunity - Spring 2027"
 
     def test_send_project_presentation_sets_subject_and_context(self, monkeypatch):
         client = EmailClient()

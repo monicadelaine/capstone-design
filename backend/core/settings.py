@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -242,6 +243,8 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@example.com')
 EMAIL_FAIL_SILENTLY = os.environ.get('EMAIL_FAIL_SILENTLY', 'False') == 'True'
+# Year shown in sponsor outreach emails; defaults to the current year.
+CAPSTONE_YEAR = int(os.environ.get('CAPSTONE_YEAR') or date.today().year)
 
 
 # Google Cloud Storage production configuration
@@ -251,7 +254,7 @@ if not DEBUG and os.getenv("GS_BUCKET_NAME"):
             "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
             "OPTIONS": {
                 "bucket_name": os.environ["GS_BUCKET_NAME"],
-                "project_id": "capstone-design-fall-2026",
+                "project_id": os.environ.get("GS_PROJECT_ID", "capstone-design-fall-2026"),
                 "default_acl": None,
                 "querystring_auth": True,
             },
