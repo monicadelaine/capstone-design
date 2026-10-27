@@ -93,9 +93,7 @@ async function checkProfileAndRedirect(next) {
 }
 
 router.beforeEach(async (to, from, next) => {
-  const { isAuthenticated, isLoading, user, loginWithRedirect } = auth0;
-  
-
+  const { isAuthenticated, isLoading, user, loginWithRedirect } = auth0;  
   
   // Handle login page
   if (to.path === '/' || to.name === 'Login') {
