@@ -53,6 +53,6 @@ The code reads two custom token claims with a fixed prefix: `https://backend-api
 
 ## Notes
 
-- The domain and client ID are not secrets for a single-page app, but keep them out of `.env.example` anyway so each environment stays explicit.
+- The team tenant is live: its domain and client ID are in `.env.example` and `frontend/.env.example.local`. They are not secrets for a single-page app. Never commit a client secret or a Management API token.
 - When the app is hosted (#52), add the hosted URL to the callback, logout, and web origin lists.
 - The email-domain fallback in the Action is temporary. #43 replaces it with a lookup in our Student table.
