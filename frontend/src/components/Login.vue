@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onMounted, watch, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth0 } from '@auth0/auth0-vue';
 
-const { loginWithRedirect, isLoading, isAuthenticated, user } = useAuth0();
+const { loginWithRedirect } = useAuth0();
 const route = useRoute();
 const router = useRouter();
 
@@ -32,17 +32,6 @@ const userEmail = computed(() => unverifiedEmailFromError.value || null);
 
 const clearError = () => router.replace({ path: '/', query: {} });
 
-const redirectByRole = () => {
-        const roles = user.value?.['https://backend-api-capstone/roles'] ?? [];
-        if (roles.includes('student')) {
-                router.push('/student');
-        } else if (roles.includes('sponsor')) {
-                router.push('/sponsor');
-        } else {
-                router.push('/?error=no_role');
-        }
-};
-
 // Modal controls
 const openSignupModal = () => { showSignupModal.value = true; };
 const closeSignupModal = () => { showSignupModal.value = false; };
@@ -69,18 +58,8 @@ const handleSignup = (role) => {
 	});
 };
 
-// Already-authenticated users landing on this page
-onMounted(() => {
-        if (isAuthenticated.value && !isLoading.value) {
-                redirectByRole();
-        }
-});
-
-watch([isAuthenticated, isLoading], ([authed, loading]) => {
-        if (authed && !loading) {
-                redirectByRole();
-        }
-});</script>
+);
+</script>
 
 <template>
         <div class="login-container">
