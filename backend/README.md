@@ -82,6 +82,11 @@ The backend test suite uses `pytest` with `pytest-django` and is organized by ap
         - Remove selected projects from a semester
     - Preference admin action:
         - Assign selected students to a project with create/update/error-path coverage
+- **Proposed-assignment tests** (`project/tests/test_assignment.py`)
+    - CP-SAT model: known optimum, unused projects, exact and minimum team sizes, infeasible input
+    - `propose`: cohort from the semester's preferences, cancelled projects skipped, clear errors; saves nothing
+    - `approve`: creates or replaces `Assignment` rows; rejects tampered, expired, or stale proposals
+    - Semester admin flow: propose action renders the table, approve view saves it and checks permissions
 
 #### `user` app
 

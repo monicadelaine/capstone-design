@@ -3,14 +3,18 @@ import mimetypes
 
 from django import forms
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Exists, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
+from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve, propose
 from project.models import Project, Semester, Preference, Assignment, Feedback, Attachment
 from project.resources import ProjectResource, SemesterResource, PreferenceResource, AssignmentResource, FeedbackResource, AttachmentResource
 
@@ -239,6 +243,65 @@ class SemesterAdmin(ImportExportModelAdmin):
         url = (reverse('admin:project_project_changelist') + '?' + urlencode({'semester': obj.id}))
         count = obj.projects.count()
         return format_html(f'<a href="{url}">{count}</a>')
+
+    class ProposeAssignmentsActionForm(AdminActionForm):
+        team_size = forms.IntegerField(min_value=1, initial=DEFAULT_TEAM_SIZE, help_text='Most students on one project.')
+        min_size = forms.IntegerField(
+            min_value=1, initial=DEFAULT_TEAM_SIZE, label='Minimum team size',
+            help_text='Fewest students on a project that is used. Lower it if students do not divide evenly.',
+        )
+
+        def clean(self):
+            cleaned = super().clean()
+            if cleaned.get('min_size') and cleaned.get('team_size') and cleaned['min_size'] > cleaned['team_size']:
+                raise forms.ValidationError('Minimum team size cannot be larger than the team size.')
+            return cleaned
+
+        class Meta:
+            help_text = 'Runs the solver on the selected semester. Nothing is saved until you approve the proposal.'
+
+    # Proposed assignments (PBI-04, #51): solve, show the table, save only on approval.
+    @action_with_form(ProposeAssignmentsActionForm, description='Propose assignments')
+    def propose_assignments(self, request, queryset, data):
+        if queryset.count() != 1:
+            self.message_user(request, 'Select exactly one semester to propose assignments for.', level='error')
+            return None
+        try:
+            proposal = propose(queryset.get(), capacity=data['team_size'], min_size=data['min_size'])
+        except ProposalError as e:
+            self.message_user(request, str(e), level='error')
+            return None
+        return TemplateResponse(request, 'admin/project/semester/assignment_proposal.html', {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': f'Proposed assignments for {proposal.semester}',
+            'proposal': proposal,
+            'existing': Assignment.objects.filter(semester=proposal.semester).count(),
+        })
+
+    actions = [propose_assignments]
+
+    def get_urls(self):
+        custom_urls = [
+            path('approve-assignments/', self.admin_site.admin_view(self.approve_assignments_view),
+                 name='project_semester_approve_assignments'),
+        ]
+        return custom_urls + super().get_urls()
+
+    def approve_assignments_view(self, request):
+        if request.method != 'POST':
+            return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
+        if not (request.user.has_perm('project.add_assignment') and request.user.has_perm('project.change_assignment')):
+            raise PermissionDenied
+        try:
+            semester, created, updated = approve(request.POST.get('token', ''))
+        except ProposalError as e:
+            self.message_user(request, str(e), level='error')
+            return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
+        self.message_user(request, f'Approved assignments for {semester}. Created: {created}, Updated: {updated}.')
+        return HttpResponseRedirect(
+            reverse('admin:project_assignment_changelist') + '?' + urlencode({'semester__id__exact': semester.id})
+        )
 
 
 @admin.register(Preference)
