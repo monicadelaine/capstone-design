@@ -6,8 +6,8 @@ Two automated suites exist, and both run inside the dev containers. Counts are a
 
 | Suite | Runner | Where the tests live | Tests |
 |---|---|---|---|
-| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 240 |
-| Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 36 |
+| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 236 |
+| Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 28 |
 
 ## Run everything with one command
 
@@ -58,19 +58,19 @@ DJANGO_ALLOWED_HOSTS=localhost SECRET_KEY=test .venv/bin/pytest -q
 
 - `project`: model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences (a student sees and changes only their own), assignments (student, teammate, and sponsor visibility; admin-only writes), semesters (login to read, admin to write), and feedback; the `seed_demo` command; admin actions for project status, semester membership, and assigning students to projects.
 - `user`: Sponsor and Student models and validators (phone, CWID); serializers; the sponsor and student endpoints and the profile endpoint; sponsor admin email actions.
-- `emails`: email serializers; the send endpoints, including admin-only access; the email client, template rendering, and EML export helpers; the custom admin views.
+- `emails`: email serializers; the send endpoints, including admin-only access; the email client, template rendering, and EML export helpers.
 
 **Frontend**:
 
 - `services/api.test.js`: bearer token handling, endpoint URLs, student data normalization.
 - `stores/`: `projectsStore` and `studentStore` fetch flows, fallbacks, getters, and reset.
-- `components/`: ConfirmationModal, EmailForm, ProjectPresentation, Sidebar, SponsorOutreach, and SponsorProjectForm (profile line, project-limit lockout, submit payload and in-flight lock, inline server errors).
+- `components/`: ConfirmationModal, Sidebar, and SponsorProjectForm (profile line, project-limit lockout, submit payload and in-flight lock, inline server errors).
 
 The backend README has a fuller per-file breakdown under "Unit Tests (Pytest)".
 
 ## Where tests run automatically
 
-`.github/workflows/test.yml` runs both suites as separate jobs, `backend` and `frontend`, on every push and pull request. The backend job installs from `backend/requirements.txt` on Python 3.12; the frontend job runs `npm ci` and `npm run test` on Node 24 to match the Dockerfile. A pull request should not be merged with a red check.
+`.github/workflows/test.yml` runs both suites as separate jobs, `backend` and `frontend`, on every push and pull request. The backend job installs from `backend/requirements.txt` on Python 3.11 (`.python-version`); the frontend job runs `npm ci` and `npm run test` on Node 24 (`.nvmrc`). Both match the Dockerfiles. A pull request should not be merged with a red check.
 
 ## Conventions
 

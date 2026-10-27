@@ -114,9 +114,7 @@ The backend test suite uses `pytest` with `pytest-django` and is organized by ap
     - Templated email rendering helpers
     - Export conversion helpers (`convert_html_to_mhtml`, `convert_html_to_eml`)
     - Single-project presentation helper methods used by admin workflows
-- **Admin tests** (`emails/tests/test_admin.py`)
-    - Custom admin-site URL registration
-    - Sponsor outreach and project presentation admin views (GET render + POST send/redirect)
+    - Outreach subject year from `CAPSTONE_YEAR` or an explicit `year`
 
 ### Running Tests
 

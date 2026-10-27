@@ -22,6 +22,8 @@ Write/collaborator access to the professor-owned GitHub repository.
 
 You will work from your own local copy of the project. You do not need to connect to anyone else's computer or Docker setup. GitHub is the shared source of truth for the code.
 
+Versions: Python 3.11 (`.python-version`) and Node 24 (`.nvmrc`). The Dockerfiles and CI use the same versions, so you only need them installed yourself if you run the backend or frontend outside Docker. Backend packages are pinned in `backend/requirements.txt`; to upgrade one, change its version, rebuild the backend image, and run the tests.
+
 
 ## Clone the project
 
