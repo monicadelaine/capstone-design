@@ -6,7 +6,7 @@ Two automated suites exist, and both run inside the dev containers. Counts are a
 
 | Suite | Runner | Where the tests live | Tests |
 |---|---|---|---|
-| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 236 |
+| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 258 |
 | Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 28 |
 
 ## Run everything with one command
@@ -56,7 +56,7 @@ DJANGO_ALLOWED_HOSTS=localhost SECRET_KEY=test .venv/bin/pytest -q
 
 **Backend**, by Django app:
 
-- `project`: model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences (a student sees and changes only their own), assignments (student, teammate, and sponsor visibility; admin-only writes), semesters (login to read, admin to write), and feedback; the `seed_demo` command; admin actions for project status, semester membership, and assigning students to projects.
+- `project`: model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences (a student sees and changes only their own), assignments (student, teammate, and sponsor visibility; admin-only writes), semesters (login to read, admin to write), and feedback; the `seed_demo` command; admin actions for project status, semester membership, and assigning students to projects; the proposed-assignment solver, its approve step, and the semester admin flow.
 - `user`: Sponsor and Student models and validators (phone, CWID); serializers; the sponsor and student endpoints and the profile endpoint; sponsor admin email actions.
 - `emails`: email serializers; the send endpoints, including admin-only access; the email client, template rendering, and EML export helpers.
 

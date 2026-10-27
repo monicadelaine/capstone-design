@@ -3,6 +3,7 @@
 **Date:** 2026-10-25 · **Author:** Margulan Baizhakyp · **Timebox:** one day
 **Question:** Can Google OR-Tools CP-SAT propose student-project assignments for the admin to approve, as the sponsor asked on 9/22?
 **Answer:** Yes. Recommend proceeding with OR-Tools for the proposed-assignment feature (#51).
+**Status:** first slice built in #51 (`backend/project/assignment.py`). Proposals are not stored: the review page carries a signed token and approval writes `Assignment` rows. Team size is a range the admin sets, defaulting to exactly 4.
 
 ## What was built
 
