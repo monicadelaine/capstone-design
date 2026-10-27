@@ -95,10 +95,7 @@ async function checkProfileAndRedirect(next) {
 router.beforeEach(async (to, from, next) => {
   const { isAuthenticated, isLoading, user, loginWithRedirect } = auth0;
   
-    // Wait until Auth0 has finished restoring the login session.
-  while (isLoading.value) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
+
   
   // Handle login page
   if (to.path === '/' || to.name === 'Login') {

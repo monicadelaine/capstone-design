@@ -1,9 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth0 } from '@auth0/auth0-vue';
 
-const { loginWithRedirect } = useAuth0();
+const { loginWithRedirect, isLoading, isAuthenticated, user } = useAuth0();
 const route = useRoute();
 const router = useRouter();
 
@@ -58,7 +58,27 @@ const handleSignup = (role) => {
 	});
 };
 
+
+// Redirect once authentication completes.
+watch(
+  [isLoading, isAuthenticated],
+  ([loading, authenticated]) => {
+    if (loading || !authenticated || route.query.error) return;
+
+    const roles = user.value?.['https://backend-api-capstone/roles'] ?? [];
+    const role = Array.isArray(roles) ? roles[0]?.toLowerCase() : null;
+
+    if (role === 'student') {
+      router.replace('/student');
+    } else if (role === 'sponsor') {
+      router.replace('/sponsor');
+    } else {
+      router.replace('/?error=no_role');
+    }
+  },
+  { immediate: true }
 );
+
 </script>
 
 <template>
