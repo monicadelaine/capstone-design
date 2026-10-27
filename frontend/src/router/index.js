@@ -94,9 +94,21 @@ async function checkProfileAndRedirect(next) {
 
 router.beforeEach(async (to, from, next) => {
   const { isAuthenticated, isLoading, user, loginWithRedirect } = auth0;
-
+  
+    // Wait until Auth0 has finished restoring the login session.
+  while (isLoading.value) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
   // Handle login page
   if (to.path === '/' || to.name === 'Login') {
+
+    // Show errors without redirecting again
+    if (to.query.error) {
+      next();
+      return;
+    }
+
     if (isAuthenticated.value) {
       const userRole = getUserRole(user.value);
 
@@ -144,11 +156,6 @@ router.beforeEach(async (to, from, next) => {
 
     next();
     return;
-  }
-
-  // Wait for auth to finish loading
-  while (isLoading.value) {
-    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   // Check authentication
