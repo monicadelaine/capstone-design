@@ -25,7 +25,7 @@ Live board: https://github.com/users/mbaizhakyp/projects/1
 
 ## Plan vs. actual
 
-9 Issues planned (7 new, 2 carried from Iteration 1). 6 done, 3 open. Nothing was removed from the plan.
+9 Issues planned (7 new, 2 carried from Iteration 1). 5 done, 4 open (one of them, #47, closes when the tag is pushed). Nothing was removed from the plan.
 
 | # | Owner | Item | Result | Evidence |
 |---|---|---|---|---|
