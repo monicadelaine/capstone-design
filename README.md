@@ -7,16 +7,16 @@ A web platform for the University of Alabama Computer Science senior design cour
 
 ## Status
 
-**Iteration 1 (due 2026-09-24).** We are building on the Spring 2026 team's codebase ([ADR-001](docs/decisions/ADR-001-stack.md)). The full stack runs locally with Docker Compose and the backend test suite passes in CI. Not yet deployed; hosting is under investigation. No new user-facing features are live yet.
+**Iteration 2 (due 2026-10-27).** Deployed on Google Cloud at https://ua-capstone-design.duckdns.org/. Students rank projects; sponsors submit projects; the API limits each user to their own data; the instructor can have OR-Tools propose an assignment of students to projects and approve it in Django admin. Review: [course/iterations/iteration-2/review.md](course/iterations/iteration-2/review.md).
 
-Delivered so far: local development environment and guide, CI, architecture decisions, data model, project board and backlog.
+Remaining work for Iteration 3 and handoff is the Product Backlog view on the board below.
 
 ## Links
 
-- **GitHub Project board:** https://github.com/users/mbaizhakyp/projects/1
+- **GitHub Project board (backlog, iteration plans, results):** https://github.com/users/mbaizhakyp/projects/1. It is owned by a team member's account, so it does not appear under this repository's Projects tab; the Senior Design Project linked there is the course example.
 - **Documentation:** [docs/](docs/) — [development guide](docs/development-guide/), [data model](docs/development-guide/data-model.md), [decisions](docs/decisions/), [v1 reference](docs/investigations/v1-reference.md)
 - **Course records:** [course/](course/) — presentations, iteration reviews and retrospectives
-- **Stand-ups:** [Issues labeled `stand-up`](https://github.com/monicadelaine/capstone-design/issues?q=label%3Astand-up)
+- **Stand-ups:** [Issues labeled `stand-up`](https://github.com/monicadelaine/capstone-design/issues?q=label%3Astand-up), indexed by date in [course/](course/README.md#stand-ups)
 - **Prior team's repository (reference only):** https://github.com/jmburke4/capstone-design-manager
 
 ## Run it locally

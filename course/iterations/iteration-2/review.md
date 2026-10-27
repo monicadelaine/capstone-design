@@ -25,7 +25,7 @@ Live board: https://github.com/users/mbaizhakyp/projects/1
 
 ## Plan vs. actual
 
-9 Issues planned (7 new, 2 carried from Iteration 1). 5 done, 4 open (one of them, #47, closes when the tag is pushed). Nothing was removed from the plan.
+9 Issues planned (7 new, 2 carried from Iteration 1). 5 done, 4 open (one of them, #47, closes when the tag is pushed). Nothing was removed from the plan. Two Iteration 3 items were also finished early (#51, #53), and the site was deployed.
 
 | # | Owner | Item | Result | Evidence |
 |---|---|---|---|---|
@@ -39,7 +39,14 @@ Live board: https://github.com/users/mbaizhakyp/projects/1
 | #48 | Jayden | Board views and snapshots | **Open** | Snapshots committed; the Team Contributions view is not yet grouped by person |
 | #47 | Margulan | This package | Open until the tag is pushed | this folder |
 
-Also added: a `seed_demo` command (PR #56) so any machine can load demo data.
+Added during the iteration:
+
+| # | Owner | Item | Evidence |
+|---|---|---|---|
+| #51 | Gaurav | Admin proposes assignments with OR-Tools and approves them (first slice) | PR #65, 22 tests, merged 10/27 |
+| #53 | Gaurav | Dependency pinning and v1 dead-code removal | PR #64, merged 10/27 |
+| — | Noland | Production deployment on Google Cloud and login fixes | PRs #59, #61, #62, #63; live at https://ua-capstone-design.duckdns.org/ |
+| — | Margulan | `seed_demo` command for demo data | PR #56 |
 
 **Who did the work.** #43 and #49 were assigned to Noland and Gaurav but were implemented by Margulan, with AI assistance, on 10/26 so the goal could be demonstrated. Noland and Gaurav are asked to review PR #55. The contribution view shows the Issue owners, not the implementer; the PR shows who wrote it.
 
@@ -51,8 +58,8 @@ Script: [demo-script.md](demo-script.md). The solver assigning 100 students to 2
 
 | Measure | Iteration 1 | Iteration 2 |
 |---|---|---|
-| Backend tests passing | 188 | 240 |
-| Frontend tests passing | 36 | 36 |
+| Backend tests passing | 188 | 258 (PR #65) |
+| Frontend tests passing | 36 | 28 (PR #64 removed v1's dead components and their tests) |
 | CI on every push and PR | yes | yes, green on `main` |
 
 - The 36 new security tests were run against the old code first: 30 failed, 3 passed (the "allowed" cases). So they detect the holes they target.
@@ -68,12 +75,13 @@ No reply yet on the ranking rule or teammate preferences, first asked 9/22. The 
 - From the spike: before #51, decide how a solver proposal is stored until the admin approves it, and whether team size is exact or a range.
 - From #45: the interim Auth0 Action assigns roles by email domain; a roster lookup should replace it.
 - From #43: feedback and attachment endpoints need the same treatment: #57, Iteration 3.
+- 10/27: the backlog listed only near-term work. Added #66–#84 so it covers the whole product: student roster import, project approval, team size, manual assignment edits, team views for students and sponsors, attachments, emails, server-side roles, a full-semester test, user and deployment guides, and the unanswered sponsor questions as RISK-01 (#81). Each has acceptance criteria.
 
 ## Stand-ups
 
 [#37](https://github.com/monicadelaine/capstone-design/issues/37) 10/06, [#38](https://github.com/monicadelaine/capstone-design/issues/38) 10/08, [#40](https://github.com/monicadelaine/capstone-design/issues/40) 10/13, [#41](https://github.com/monicadelaine/capstone-design/issues/41) 10/15, [#42](https://github.com/monicadelaine/capstone-design/issues/42) 10/20, plus the in-class stand-up on 10/27.
 
-There were no stand-up Issues between 9/24 and 10/06, and none on 10/22.
+There were no stand-up Issues between 9/24 and 10/06, and none on 10/22. Full list: [course/README.md](../../README.md#stand-ups).
 
 ## AI use
 
