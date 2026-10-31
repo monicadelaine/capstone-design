@@ -14,7 +14,8 @@ from django.utils.http import urlencode
 from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
-from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve, propose
+from emails.notifications import NotificationError, notify_assignments_posted
+from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve_with_changes, propose
 from project.models import Project, Semester, Preference, Assignment, Feedback, Attachment
 from project.resources import ProjectResource, SemesterResource, PreferenceResource, AssignmentResource, FeedbackResource, AttachmentResource
 
@@ -294,11 +295,18 @@ class SemesterAdmin(ImportExportModelAdmin):
         if not (request.user.has_perm('project.add_assignment') and request.user.has_perm('project.change_assignment')):
             raise PermissionDenied
         try:
-            semester, created, updated = approve(request.POST.get('token', ''))
+            semester, created, updated, changed = approve_with_changes(request.POST.get('token', ''))
         except ProposalError as e:
             self.message_user(request, str(e), level='error')
             return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
         self.message_user(request, f'Approved assignments for {semester}. Created: {created}, Updated: {updated}.')
+        # The assignments are saved either way; a mail problem must not undo or hide the approval.
+        try:
+            sent, failed = notify_assignments_posted(semester, changed)
+            self.message_user(request, f'Emailed {sent} student(s) their assignment. Failed: {failed}.',
+                              level='warning' if failed else 'success')
+        except NotificationError as e:
+            self.message_user(request, f'Students were not emailed: {e}', level='warning')
         return HttpResponseRedirect(
             reverse('admin:project_assignment_changelist') + '?' + urlencode({'semester__id__exact': semester.id})
         )

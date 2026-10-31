@@ -3,6 +3,7 @@ from django.core.mail import send_mail
 from django.core.mail import EmailMultiAlternatives
 from django.core.mail.backends.smtp import EmailBackend as SMTPBackend
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 
 class EmailClient:
@@ -69,6 +70,33 @@ class EmailClient:
             smtp_port=smtp_port,
             smtp_username=smtp_username,
             smtp_password=smtp_password,
+        )
+
+    def send_assignment_posted(self, student, assignment):
+        return self.send_templated_email(
+            subject=f"Your UA CS Capstone project assignment - {assignment.semester}",
+            recipient_list=[student.email],
+            template_name="assignment_posted",
+            context={
+                'student_name': student.preferred_name or student.first_name,
+                'semester': str(assignment.semester),
+                'project_name': assignment.project.name,
+                'assignment_url': f'{settings.APP_URL}/student/assignment',
+            },
+        )
+
+    def send_deadline_reminder(self, student, semester, days_left):
+        return self.send_templated_email(
+            subject=f"Reminder: rank your UA CS Capstone project preferences by {timezone.localtime(semester.assignment_date):%b %-d}",
+            recipient_list=[student.email],
+            template_name="deadline_reminder",
+            context={
+                'student_name': student.preferred_name or student.first_name,
+                'semester': str(semester),
+                'deadline': f'{timezone.localtime(semester.assignment_date):%A, %B %-d at %-I:%M %p %Z}',
+                'days_left': days_left,
+                'ranking_url': f'{settings.APP_URL}/student/submit',
+            },
         )
 
     def send_sponsor_outreach(self, recipient_list, semester='spring', collection_date='TBD',
