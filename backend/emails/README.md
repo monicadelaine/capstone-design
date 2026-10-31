@@ -74,10 +74,39 @@ Email templates are located in `backend/emails/templates/emails/`:
 - `sponsor_outreach.html` - Sponsor outreach email
 - `project_presentation.html` / `project_presentation_single.html` - Project presentation invitation email
 - `base.html` - Base HTML template
+- `assignment_posted.html` / `deadline_reminder.html` - Student notification emails
 
 ## Admin
 
 The Vue app has no email pages. Admins send and export these emails from Django admin: select sponsors under Users > Sponsors and choose an email action.
+
+## Student notifications
+
+Two emails go to students (PBI-05, #54). Both are plain `EmailClient` sends, so in local development they land in Mailhog at http://localhost:8025.
+
+| Email | When | Who | Template |
+|-------|------|-----|----------|
+| Assignment posted | When an admin approves a proposed assignment (Semester admin > Propose assignments > Approve) | Only students whose assignment is new or moved to a different project | `assignment_posted.html` |
+| Ranking deadline reminder | Once per semester, when the ranking deadline (`Semester.assignment_date`) is within `DEADLINE_REMINDER_DAYS` days | Students with no preferences saved for that semester | `deadline_reminder.html` |
+
+Approving still saves the assignments if the emails cannot be sent; the admin sees a warning instead.
+
+The reminder is a management command. Run it daily (cron, Cloud Scheduler); it does nothing until a semester is due and never reminds the same semester twice (`Semester.reminder_sent_at`):
+
+```bash
+docker-compose -f docker-compose.dev.yml exec backend python manage.py send_deadline_reminders --dry-run   # list recipients, send nothing
+docker-compose -f docker-compose.dev.yml exec backend python manage.py send_deadline_reminders             # send
+docker-compose -f docker-compose.dev.yml exec backend python manage.py send_deadline_reminders --force     # resend to a semester already reminded
+docker-compose -f docker-compose.dev.yml exec backend python manage.py send_deadline_reminders --days 5    # override DEADLINE_REMINDER_DAYS
+```
+
+The reminder goes to every student without preferences, because a student is not linked to a semester until they rank. Remove students from past semesters from the Student table (or check `--dry-run`) before the first reminder of a semester.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEADLINE_REMINDER_DAYS` | Days before the deadline the reminder goes out | `3` |
+| `APP_URL` | Base URL used for the links in the emails | `http://localhost:5173` |
+| `ALLOW_STUDENT_EMAILS` | Student emails are refused unless the mail backend is a local catcher (console, Mailhog). Set `True` to send to real students | `False` |
 
 ## Configuration
 

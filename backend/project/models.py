@@ -176,6 +176,9 @@ class Semester(models.Model):
     projects = models.ManyToManyField(Project)
     """[Optional] The projects that will be assigned during the semester"""
 
+    reminder_sent_at = models.DateTimeField(null=True, blank=True, editable=False)
+    """[Default] When the deadline reminder emails went out; empty until they are sent"""
+
     created_at = models.DateTimeField(auto_now_add=True)
     """[Default] Tracks when the record was created"""
 
