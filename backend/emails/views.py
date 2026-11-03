@@ -11,6 +11,11 @@ from user.authentication import Auth0Authentication
 ADMIN_ONLY = [IsAuthenticated, IsAdminRole]
 
 
+def sent_by(request):
+    """Who to record in the email log for this request."""
+    return getattr(request.user, 'email', '') or str(request.user)
+
+
 @api_view(['GET', 'POST'])
 @authentication_classes([Auth0Authentication])
 @permission_classes(ADMIN_ONLY)
@@ -34,6 +39,7 @@ def send_email(request):
             message=message,
             recipient_list=recipient_list,
             html_message=html_message,
+            sent_by=sent_by(request),
         )
         return Response({'status': 'email sent successfully'})
     except Exception as e:
@@ -66,7 +72,8 @@ def send_sponsor_outreach(request):
             recipient_list=recipients,
             semester=semester,
             collection_date=collection_date,
-            from_email=from_email
+            from_email=from_email,
+            sent_by=sent_by(request),
         )
         return Response({'status': 'sponsor outreach email sent successfully'})
     except Exception as e:
@@ -107,6 +114,7 @@ def send_project_presentation(request):
             contact_email=request.data.get('contact_email'),
             zoom_details=request.data.get('zoom_details'),
             from_email=from_email,
+            sent_by=sent_by(request),
         )
         return Response({'status': 'project presentation email sent successfully'})
     except Exception as e:

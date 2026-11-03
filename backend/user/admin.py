@@ -28,56 +28,46 @@ class SponsorAdmin(ImportExportModelAdmin):
     def send_sponsor_outreach_email(self, request, queryset):
         if '_cancel' in request.POST:
             return HttpResponseRedirect(reverse('admin:user_sponsor_changelist'))
-        
+
+        context = {
+            'queryset': queryset,
+            'title': 'Send Sponsor Outreach Email',
+            'action_checkbox_name': ACTION_CHECKBOX_NAME,
+            'selected_ids': list(queryset.values_list('id', flat=True)),
+            'recipients': [s.email for s in queryset],
+            'values': {},
+        }
+
         # Check if form was submitted (has semester field) vs just selecting action
         if request.method == 'POST' and request.POST.get('semester'):
             semester = request.POST.get('semester', 'spring')
             collection_date = request.POST.get('collection_date', 'TBD')
-            from_email = request.POST.get('from_email')
-            smtp_host = request.POST.get('smtp_host')
-            smtp_port = request.POST.get('smtp_port')
-            smtp_username = request.POST.get('smtp_username')
-            smtp_password = request.POST.get('smtp_password')
+            context['values'] = {'semester': semester, 'collection_date': collection_date}
 
-            recipients = [s.email for s in queryset]
+            # Step 1: show exactly what will be sent, to whom. Nothing is sent yet.
+            if request.POST.get('preview_btn'):
+                context['preview_subject'] = email_client.sponsor_outreach_subject(semester)
+                context['preview_html'] = email_client.render_sponsor_outreach_html(semester, collection_date)
+                return render(request, 'admin/sponsor_outreach_action.html', context)
 
-            try:
-                kwargs = {}
-                if from_email:
-                    kwargs['from_email'] = from_email
-                if smtp_host:
-                    kwargs['smtp_host'] = smtp_host
-                if smtp_port:
-                    kwargs['smtp_port'] = smtp_port
-                if smtp_username:
-                    kwargs['smtp_username'] = smtp_username
-                if smtp_password:
-                    kwargs['smtp_password'] = smtp_password
+            # Step 2: send. Mail settings and sender come from the server, never from this form.
+            if request.POST.get('apply'):
+                recipients = context['recipients']
+                try:
+                    email_client.send_sponsor_outreach(
+                        recipient_list=recipients,
+                        semester=semester,
+                        collection_date=collection_date,
+                        sent_by=request.user.get_username(),
+                    )
+                    self.message_user(request, f'Successfully sent outreach email to {len(recipients)} sponsor(s)')
+                except Exception as e:
+                    self.message_user(request, f'Error sending email: {str(e)}', level='error')
 
-                email_client.send_sponsor_outreach(
-                    recipient_list=recipients,
-                    semester=semester,
-                    collection_date=collection_date,
-                    **kwargs
-                )
-                self.message_user(request, f'Successfully sent outreach email to {len(recipients)} sponsor(s)')
-            except Exception as e:
-                self.message_user(request, f'Error sending email: {str(e)}', level='error')
-
-            return HttpResponseRedirect(reverse('admin:user_sponsor_changelist'))
+                return HttpResponseRedirect(reverse('admin:user_sponsor_changelist'))
 
         # Show the form
-        selected = queryset.values_list('id', flat=True)
-        return render(
-            request,
-            'admin/sponsor_outreach_action.html',
-            {
-                'queryset': queryset,
-                'title': 'Send Sponsor Outreach Email',
-                'action_checkbox_name': ACTION_CHECKBOX_NAME,
-                'selected_ids': list(selected),
-            }
-        )
+        return render(request, 'admin/sponsor_outreach_action.html', context)
     send_sponsor_outreach_email.short_description = 'Send Sponsor Outreach Email'
 
     def export_sponsor_outreach_eml(self, request, queryset):
@@ -143,76 +133,60 @@ class SponsorAdmin(ImportExportModelAdmin):
     def send_project_presentation_email(self, request, queryset):
         if '_cancel' in request.POST:
             return HttpResponseRedirect(reverse('admin:user_sponsor_changelist'))
-        
+
+        first_sponsor = queryset.first()
+        context = {
+            'queryset': queryset,
+            'title': 'Send Project Presentation Email',
+            'action_checkbox_name': ACTION_CHECKBOX_NAME,
+            'projects': Project.objects.filter(sponsor=first_sponsor) if first_sponsor else [],
+            'contact_name': f"{first_sponsor.first_name} {first_sponsor.last_name}" if first_sponsor else '',
+            'contact_email': first_sponsor.email if first_sponsor else '',
+            'values': {},
+        }
+
         # Check if form was submitted (has date field) vs just selecting action
         if request.method == 'POST' and request.POST.get('date'):
             date = request.POST.get('date', 'TBD')
             time = request.POST.get('time', 'TBD')
             zoom_details = request.POST.get('zoom_details', 'TBD')
-            from_email = request.POST.get('from_email')
-            smtp_host = request.POST.get('smtp_host')
-            smtp_port = request.POST.get('smtp_port')
-            smtp_username = request.POST.get('smtp_username')
-            smtp_password = request.POST.get('smtp_password')
+            context['values'] = {'date': date, 'time': time, 'zoom_details': zoom_details}
 
-            total_sent = 0
-            for sponsor in queryset:
-                projects = Project.objects.filter(sponsor=sponsor)
-                if not projects:
-                    continue
+            # Step 1: show what will be sent, to whom. Nothing is sent yet.
+            if request.POST.get('preview_btn'):
+                sponsors_with_projects = [s for s in queryset if Project.objects.filter(sponsor=s).exists()]
+                sample = Project.objects.filter(sponsor=sponsors_with_projects[0]).first() if sponsors_with_projects else None
+                context['recipients'] = [s.email for s in sponsors_with_projects]
+                context['email_count'] = sum(Project.objects.filter(sponsor=s).count() for s in sponsors_with_projects)
+                if sample:
+                    context['preview_subject'] = f'Project Presentation: {sample.name}'
+                    context['preview_html'] = email_client.render_project_presentation_single_html(
+                        date=date, time=time, project=sample, zoom_details=zoom_details)
+                return render(request, 'admin/project_presentation_action.html', context)
 
-                kwargs = {}
-                if from_email:
-                    kwargs['from_email'] = from_email
-                if smtp_host:
-                    kwargs['smtp_host'] = smtp_host
-                if smtp_port:
-                    kwargs['smtp_port'] = smtp_port
-                if smtp_username:
-                    kwargs['smtp_username'] = smtp_username
-                if smtp_password:
-                    kwargs['smtp_password'] = smtp_password
+            # Step 2: send. Mail settings and sender come from the server, never from this form.
+            if request.POST.get('apply'):
+                total_sent = 0
+                for sponsor in queryset:
+                    for project in Project.objects.filter(sponsor=sponsor):
+                        try:
+                            email_client.send_project_presentation_for_project(
+                                recipient_list=[sponsor.email],
+                                date=date,
+                                time=time,
+                                project=project,
+                                zoom_details=zoom_details,
+                                sent_by=request.user.get_username(),
+                            )
+                            total_sent += 1
+                        except Exception as e:
+                            self.message_user(request, f'Error sending for {project.name}: {str(e)}', level='error')
 
-                for project in projects:
-                    try:
-                        email_client.send_project_presentation_for_project(
-                            recipient_list=[sponsor.email],
-                            date=date,
-                            time=time,
-                            project=project,
-                            zoom_details=zoom_details,
-                            **kwargs
-                        )
-                        total_sent += 1
-                    except Exception as e:
-                        self.message_user(request, f'Error sending for {project.name}: {str(e)}', level='error')
-
-            self.message_user(request, f'Successfully sent {total_sent} project presentation email(s)')
-            return HttpResponseRedirect(reverse('admin:user_sponsor_changelist'))
+                self.message_user(request, f'Successfully sent {total_sent} project presentation email(s)')
+                return HttpResponseRedirect(reverse('admin:user_sponsor_changelist'))
 
         # Show the form
-        first_sponsor = queryset.first()
-        if first_sponsor:
-            projects = Project.objects.filter(sponsor=first_sponsor)
-            default_contact_name = f"{first_sponsor.first_name} {first_sponsor.last_name}"
-            default_contact_email = first_sponsor.email
-        else:
-            projects = []
-            default_contact_name = ''
-            default_contact_email = ''
-
-        return render(
-            request,
-            'admin/project_presentation_action.html',
-            {
-                'queryset': queryset,
-                'title': 'Send Project Presentation Email',
-                'action_checkbox_name': ACTION_CHECKBOX_NAME,
-                'projects': projects,
-                'contact_name': default_contact_name,
-                'contact_email': default_contact_email,
-            }
-        )
+        return render(request, 'admin/project_presentation_action.html', context)
     send_project_presentation_email.short_description = 'Send Project Presentation Email'
 
     def export_project_presentation_eml(self, request, queryset):

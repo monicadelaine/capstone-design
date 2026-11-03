@@ -15,15 +15,7 @@
         background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 15px; color: #333;
     }
     .info-text { font-size: 12px; color: #666; margin-top: 3px; }
-    .smtp-section {
-        background: #f9f9f9;
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        border: 1px solid #ddd;
-        color: #333;
-    }
-    .smtp-section h3 { margin-top: 0; color: #333; }
+    .preview-box { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 15px; margin-top: 20px; color: #333; }
 </style>
 {% endblock %}
 
@@ -45,50 +37,31 @@
         <div class="form-group">
             <label for="semester">Semester</label>
             <select name="semester" id="semester">
-                <option value="spring">Spring</option>
-                <option value="fall">Fall</option>
+                <option value="spring"{% if values.semester == "spring" %} selected{% endif %}>Spring</option>
+                <option value="fall"{% if values.semester == "fall" %} selected{% endif %}>Fall</option>
             </select>
         </div>
         
         <div class="form-group">
             <label for="collection_date">Collection Date</label>
-            <input type="text" name="collection_date" id="collection_date" placeholder="Spring 2025 (1/14/25)">
+            <input type="text" name="collection_date" id="collection_date" placeholder="Spring 2025 (1/14/25)" value="{{ values.collection_date|default:'' }}">
         </div>
-        
-        <div class="smtp-section">
-            <h3>SMTP Settings</h3>
-            <p class="info-text">Leave blank to use default settings. Fill in to send from a different email.</p>
-            
-            <div class="form-group">
-                <label for="from_email">From Email</label>
-                <input type="email" name="from_email" id="from_email" placeholder="sender@example.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="smtp_host">SMTP Host</label>
-                <input type="text" name="smtp_host" id="smtp_host" placeholder="smtp-mail.outlook.com or smtp.gmail.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="smtp_port">SMTP Port</label>
-                <input type="number" name="smtp_port" id="smtp_port" placeholder="587">
-            </div>
-            
-            <div class="form-group">
-                <label for="smtp_username">SMTP Username</label>
-                <input type="text" name="smtp_username" id="smtp_username" placeholder="your@email.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="smtp_password">SMTP Password</label>
-                <input type="password" name="smtp_password" id="smtp_password" placeholder="Password or App Password">
-            </div>
-        </div>
-        
+
         <div class="submit-row">
-            <input type="submit" name="apply" value="Send Email" class="default">
+            <input type="submit" name="preview_btn" value="Show Preview" class="button">
+            {% if preview_html %}<input type="submit" name="apply" value="Send Email" class="default">{% endif %}
             <input type="submit" name="_cancel" value="Cancel" class="button">
         </div>
+
+        {% if preview_html %}
+        <div class="preview-box">
+            <p><strong>Preview.</strong> Nothing has been sent yet. Click <em>Send Email</em> to send this to the {{ recipients|length }} recipient(s) below.</p>
+            <p><strong>Subject:</strong> {{ preview_subject }}</p>
+            <p><strong>To:</strong> {{ recipients|join:", " }}</p>
+            <hr>
+            {{ preview_html|safe }}
+        </div>
+        {% endif %}
     </form>
 </div>
 {% endblock %}
