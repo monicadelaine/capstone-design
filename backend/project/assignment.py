@@ -139,6 +139,13 @@ def propose(semester, capacity=DEFAULT_TEAM_SIZE, min_size=None):
 def approve(token):
     """Save a proposal as Assignment rows, replacing each student's existing assignment for
     the semester. Returns (semester, created count, updated count)."""
+    semester, created, updated, _ = approve_with_changes(token)
+    return semester, created, updated
+
+
+def approve_with_changes(token):
+    """Same as approve, and also returns the ids of students whose assignment is new or moved
+    to a different project (the ones to notify). Returns (semester, created, updated, changed)."""
     try:
         data = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
     except signing.SignatureExpired:
@@ -156,7 +163,10 @@ def approve(token):
         raise ProposalError('Students or projects changed since this proposal was made. Run it again.')
 
     created = updated = 0
+    changed = []
     with transaction.atomic():
+        previous = dict(Assignment.objects.filter(semester=semester, student_id__in=student_ids)
+                        .values_list('student_id', 'project_id'))
         for student_id, project_id in pairs:
             _, was_created = Assignment.objects.update_or_create(
                 student_id=student_id, semester=semester, defaults={'project_id': project_id}
@@ -165,4 +175,6 @@ def approve(token):
                 created += 1
             else:
                 updated += 1
-    return semester, created, updated
+            if previous.get(student_id) != project_id:
+                changed.append(student_id)
+    return semester, created, updated, changed

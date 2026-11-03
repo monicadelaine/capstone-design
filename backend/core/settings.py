@@ -246,6 +246,14 @@ EMAIL_FAIL_SILENTLY = os.environ.get('EMAIL_FAIL_SILENTLY', 'False') == 'True'
 # Year shown in sponsor outreach emails; defaults to the current year.
 CAPSTONE_YEAR = int(os.environ.get('CAPSTONE_YEAR') or date.today().year)
 
+# Student notification emails (PBI-05, #54).
+# Days before the ranking deadline (Semester.assignment_date) that the reminder goes out.
+DEADLINE_REMINDER_DAYS = int(os.environ.get('DEADLINE_REMINDER_DAYS') or 3)
+# Where the emails link students to.
+APP_URL = os.environ.get('APP_URL', 'http://localhost:5173').rstrip('/')
+# Student emails only go out through a local mail catcher (console, Mailhog) unless this is True.
+ALLOW_STUDENT_EMAILS = os.environ.get('ALLOW_STUDENT_EMAILS', 'False') == 'True'
+
 
 # Google Cloud Storage production configuration
 if not DEBUG and os.getenv("GS_BUCKET_NAME"):

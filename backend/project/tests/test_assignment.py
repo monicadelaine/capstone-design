@@ -1,10 +1,11 @@
 import pytest
 from django.contrib.auth.models import Permission, User
+from django.core import mail
 from django.core import signing
 from django.urls import reverse
 from django.utils import timezone
 
-from project.assignment import TOKEN_SALT, ProposalError, approve, propose, solve
+from project.assignment import TOKEN_SALT, ProposalError, approve, approve_with_changes, propose, solve
 from project.models import Assignment, Preference, Project, Semester
 from user.models import Sponsor, Student
 
@@ -138,6 +139,16 @@ class TestApprove:
         assert approve(proposal.token()) == (semester, 1, 1)
         assert Assignment.objects.get(student=student, semester=semester).project == proposal.teams[0].project
 
+    def test_reports_the_students_whose_assignment_changed(self, proposal, semester):
+        moved, same = proposal.teams[0].members[0][0], proposal.teams[1].members[0][0]
+        Assignment.objects.create(student=moved, semester=semester, project=proposal.teams[1].project)
+        Assignment.objects.create(student=same, semester=semester, project=proposal.teams[1].project)
+
+        _, created, updated, changed = approve_with_changes(proposal.token())
+
+        assert (created, updated) == (0, 2)
+        assert changed == [moved.id]
+
     def test_rejects_a_tampered_token(self, proposal):
         with pytest.raises(ProposalError, match='could not be verified'):
             approve(proposal.token() + 'x')
@@ -211,6 +222,27 @@ class TestSemesterAdminFlow:
         assert response.status_code == 302
         assert response.url.startswith(reverse('admin:project_assignment_changelist'))
         assert Assignment.objects.filter(semester=cohort).count() == 4
+
+    def test_approve_emails_each_assigned_student(self, admin_client, cohort):
+        token = self.run_action(admin_client, cohort).context['proposal'].token()
+
+        response = admin_client.post(reverse('admin:project_semester_approve_assignments'), {'token': token})
+
+        assert sorted(m.to[0] for m in mail.outbox) == ['s0@example.com', 's1@example.com', 's2@example.com', 's3@example.com']
+        messages = [str(m) for m in response.wsgi_request._messages]
+        assert 'Emailed 4 student(s) their assignment. Failed: 0.' in messages
+
+    def test_approve_keeps_assignments_when_mail_is_blocked(self, admin_client, cohort, settings):
+        settings.EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+        settings.EMAIL_HOST = 'smtp.gmail.com'
+        settings.ALLOW_STUDENT_EMAILS = False
+        token = self.run_action(admin_client, cohort).context['proposal'].token()
+
+        response = admin_client.post(reverse('admin:project_semester_approve_assignments'), {'token': token})
+
+        assert Assignment.objects.filter(semester=cohort).count() == 4
+        assert mail.outbox == []
+        assert any(str(m).startswith('Students were not emailed') for m in response.wsgi_request._messages)
 
     def test_approve_requires_assignment_permissions(self, client, cohort):
         token = propose(cohort, capacity=2).token()
