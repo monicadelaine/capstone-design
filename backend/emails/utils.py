@@ -1,9 +1,13 @@
+import logging
+
 from django.conf import settings
 from django.core.mail import send_mail
-from django.core.mail import EmailMultiAlternatives
-from django.core.mail.backends.smtp import EmailBackend as SMTPBackend
 from django.template.loader import render_to_string
 from django.utils import timezone
+
+from emails.models import EmailLog
+
+logger = logging.getLogger(__name__)
 
 
 class EmailClient:
@@ -11,35 +15,16 @@ class EmailClient:
         self.default_from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com')
 
     def send_email(self, subject, message, recipient_list, from_email=None, html_message=None,
-                   smtp_host=None, smtp_port=None, smtp_username=None, smtp_password=None):
+                   kind=EmailLog.Kind.CUSTOM, sent_by=''):
+        """Send through the server's mail settings only (EMAIL_* in settings). Credentials are never
+        accepted as arguments, so they cannot come from a form or a request. Every attempt is logged."""
         from_email = from_email or self.default_from_email
 
         if isinstance(recipient_list, str):
             recipient_list = [recipient_list]
 
-        use_custom_smtp = smtp_host and smtp_username and smtp_password
-
-        if use_custom_smtp:
-            connection = SMTPBackend(
-                host=smtp_host,
-                port=int(smtp_port) if smtp_port else 587,
-                username=smtp_username,
-                password=smtp_password,
-                use_tls=True,
-                fail_silently=getattr(settings, 'EMAIL_FAIL_SILENTLY', False),
-            )
-            email = EmailMultiAlternatives(
-                subject=subject,
-                body=message,
-                from_email=from_email,
-                to=recipient_list,
-                connection=connection,
-            )
-            if html_message:
-                email.attach_alternative(html_message, 'text/html')
-            email.send(fail_silently=getattr(settings, 'EMAIL_FAIL_SILENTLY', False))
-        else:
-            send_mail(
+        try:
+            sent = send_mail(
                 subject=subject,
                 message=message,
                 from_email=from_email,
@@ -47,14 +32,25 @@ class EmailClient:
                 html_message=html_message,
                 fail_silently=getattr(settings, 'EMAIL_FAIL_SILENTLY', False),
             )
+        except Exception as e:
+            self._log(kind, subject, recipient_list, sent_by, False, str(e))
+            raise
+        self._log(kind, subject, recipient_list, sent_by, sent != 0)
+
+    def _log(self, kind, subject, recipient_list, sent_by, success, error=''):
+        # A problem writing the log must never stop or hide an email.
+        try:
+            EmailLog.objects.create(kind=kind, subject=subject, recipients=list(recipient_list),
+                                    sent_by=sent_by, success=success, error=error)
+        except Exception:
+            logger.exception('Could not write the email log')
 
     def send_templated_email(self, subject, recipient_list, template_name, context=None,
-                             from_email=None, smtp_host=None, smtp_port=None,
-                             smtp_username=None, smtp_password=None):
+                             from_email=None, kind=EmailLog.Kind.CUSTOM, sent_by=''):
         context = context or {}
-        
+
         html_content = render_to_string(f'emails/{template_name}.html', context)
-        
+
         # For text version, strip HTML tags from HTML content
         import re
         text_content = re.sub(r'<[^>]+>', '', html_content)
@@ -66,10 +62,8 @@ class EmailClient:
             recipient_list=recipient_list,
             html_message=html_content,
             from_email=from_email,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_username=smtp_username,
-            smtp_password=smtp_password,
+            kind=kind,
+            sent_by=sent_by,
         )
 
     def send_assignment_posted(self, student, assignment):
@@ -77,6 +71,8 @@ class EmailClient:
             subject=f"Your UA CS Capstone project assignment - {assignment.semester}",
             recipient_list=[student.email],
             template_name="assignment_posted",
+            kind=EmailLog.Kind.ASSIGNMENT_POSTED,
+            sent_by='system',
             context={
                 'student_name': student.preferred_name or student.first_name,
                 'semester': str(assignment.semester),
@@ -90,6 +86,8 @@ class EmailClient:
             subject=f"Reminder: rank your UA CS Capstone project preferences by {timezone.localtime(semester.assignment_date):%b %-d}",
             recipient_list=[student.email],
             template_name="deadline_reminder",
+            kind=EmailLog.Kind.DEADLINE_REMINDER,
+            sent_by='system',
             context={
                 'student_name': student.preferred_name or student.first_name,
                 'semester': str(semester),
@@ -99,12 +97,13 @@ class EmailClient:
             },
         )
 
+    def sponsor_outreach_subject(self, semester='spring', year=None):
+        return f"UA CS Capstone Project Opportunity - {semester.capitalize()} {year or settings.CAPSTONE_YEAR}"
+
     def send_sponsor_outreach(self, recipient_list, semester='spring', collection_date='TBD',
-                              from_email=None, smtp_host=None, smtp_port=None,
-                              smtp_username=None, smtp_password=None, year=None):
-        year = year or settings.CAPSTONE_YEAR
+                              from_email=None, year=None, sent_by=''):
         return self.send_templated_email(
-            subject=f"UA CS Capstone Project Opportunity - {semester.capitalize()} {year}",
+            subject=self.sponsor_outreach_subject(semester, year),
             recipient_list=recipient_list,
             template_name="sponsor_outreach",
             context={
@@ -112,10 +111,8 @@ class EmailClient:
                 'collection_date': collection_date,
             },
             from_email=from_email,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_username=smtp_username,
-            smtp_password=smtp_password,
+            kind=EmailLog.Kind.SPONSOR_OUTREACH,
+            sent_by=sent_by,
         )
 
     def send_project_presentation(
@@ -130,10 +127,7 @@ class EmailClient:
         zoom_details,
         projects=None,
         from_email=None,
-        smtp_host=None,
-        smtp_port=None,
-        smtp_username=None,
-        smtp_password=None,
+        sent_by='',
     ):
         return self.send_templated_email(
             subject=f"Project Presentation: {project_name}",
@@ -150,10 +144,8 @@ class EmailClient:
                 'projects': projects or [],
             },
             from_email=from_email,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_username=smtp_username,
-            smtp_password=smtp_password,
+            kind=EmailLog.Kind.PROJECT_PRESENTATION,
+            sent_by=sent_by,
         )
 
     def send_project_presentation_for_project(
@@ -164,10 +156,7 @@ class EmailClient:
         project,
         zoom_details,
         from_email=None,
-        smtp_host=None,
-        smtp_port=None,
-        smtp_username=None,
-        smtp_password=None,
+        sent_by='',
     ):
         return self.send_templated_email(
             subject=f"Project Presentation: {project.name}",
@@ -180,10 +169,8 @@ class EmailClient:
                 'zoom_details': zoom_details,
             },
             from_email=from_email,
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_username=smtp_username,
-            smtp_password=smtp_password,
+            kind=EmailLog.Kind.PROJECT_PRESENTATION,
+            sent_by=sent_by,
         )
 
     def render_sponsor_outreach_html(self, semester='spring', collection_date='TBD'):

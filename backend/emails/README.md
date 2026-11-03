@@ -80,6 +80,10 @@ Email templates are located in `backend/emails/templates/emails/`:
 
 The Vue app has no email pages. Admins send and export these emails from Django admin: select sponsors under Users > Sponsors and choose an email action.
 
+Sending a sponsor email is two steps: fill in the form and click **Show Preview**, which shows the subject, the recipients and the rendered email without sending anything. The **Send** button only appears with the preview. The mail server and sender always come from the server settings above (`EMAIL_*`, `DEFAULT_FROM_EMAIL`); the forms and API have no SMTP or sender fields, and any such values posted are ignored. `EmailClient` does not accept SMTP credentials as arguments.
+
+Every send is recorded in the **Email logs** table (Django admin > Emails > Email logs, read-only): time, kind, subject, recipients, who sent it, and whether it succeeded. Student notification emails are logged too, with sender `system`. Email bodies are not stored.
+
 ## Student notifications
 
 Two emails go to students (PBI-05, #54). Both are plain `EmailClient` sends, so in local development they land in Mailhog at http://localhost:8025.

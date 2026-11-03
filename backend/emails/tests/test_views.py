@@ -1,8 +1,11 @@
 import pytest
+from django.core import mail
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from emails.models import EmailLog
+from emails.serializers import EmailSerializer
 from user.authentication import UserWrapper
 
 
@@ -229,3 +232,51 @@ class TestSendProjectPresentationView:
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.data["error"] == "template rendering failed"
+
+
+@pytest.mark.django_db
+class TestEmailLoggingAndCredentials:
+    """PBI-13 (#73): credentials come from server settings only, and every send is logged."""
+
+    def test_serializer_has_no_credential_fields(self):
+        assert not [name for name in EmailSerializer().fields if "smtp" in name or "password" in name]
+
+    def test_posted_credentials_are_ignored_and_the_send_is_logged(self, api_client):
+        payload = {
+            "subject": "Capstone update", "message": "On track.", "recipients": ["sponsor@example.com"],
+            "smtp_host": "smtp.evil.example", "smtp_username": "attacker", "smtp_password": "hunter2",
+        }
+
+        response = api_client.post(reverse("emails:send_email"), payload, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(mail.outbox) == 1
+        log = EmailLog.objects.get()
+        assert (log.kind, log.recipients, log.sent_by, log.success) == (
+            "custom", ["sponsor@example.com"], "user@example.com", True)
+        assert "hunter2" not in str(log.__dict__)
+
+    def test_sponsor_outreach_is_logged_with_its_kind(self, api_client):
+        response = api_client.post(
+            reverse("emails:send_sponsor_outreach"),
+            {"recipients": ["a@example.com", "b@example.com"], "semester": "fall", "smtp_password": "hunter2"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        log = EmailLog.objects.get()
+        assert (log.kind, log.recipients) == ("sponsor_outreach", ["a@example.com", "b@example.com"])
+
+    def test_a_failed_send_is_logged(self, api_client, monkeypatch):
+        def broken(**kwargs):
+            raise RuntimeError("smtp unavailable")
+
+        monkeypatch.setattr("emails.utils.send_mail", broken)
+
+        response = api_client.post(
+            reverse("emails:send_email"),
+            {"subject": "S", "message": "M", "recipients": ["a@example.com"]}, format="json")
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        log = EmailLog.objects.get()
+        assert (log.success, log.error) == (False, "smtp unavailable")
