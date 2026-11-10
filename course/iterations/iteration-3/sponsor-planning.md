@@ -3,7 +3,7 @@
 **Sponsor:** Dr. Monica Anderson Herzog
 **Planning date:** 2026-11-10 (late: Iteration 3 began after the 10/27 review)
 **Iteration 3 due:** to fill in
-**Status:** draft by Margulan, not yet agreed by the team or confirmed with the sponsor
+**Status:** approved by the team 2026-11-10; not yet confirmed with the sponsor
 
 ## Iteration 3 Goal (proposed)
 
@@ -21,8 +21,6 @@ To raise in person at the next sponsor meeting. First asked 9/22.
 
 ## Iteration 3 plan
 
-Owners marked *proposed* have no assignee on the board yet; confirm at the next stand-up.
-
 ### Committed
 
 | # | Owner | Item | Status 11/10 |
@@ -36,13 +34,13 @@ Owners marked *proposed* have no assignee on the board yet; confirm at the next 
 | #73 | Jayden | Admin sponsor emails | In Progress (PR #90) |
 | #82 | Jayden | User guide | Todo |
 | #69 | Gaurav | Adjust a proposal before approving | Todo (committed in #89) |
-| #68 | Gaurav *(proposed)* | Team size and project capacity | Todo; needs #81 |
-| #67 | Gaurav *(proposed)* | Approve pending projects into a semester | Todo |
+| #68 | Gaurav | Team size and project capacity | Todo; needs #81 |
+| #67 | Gaurav | Approve pending projects into a semester | Todo |
 | #58 | Noland | Deployed site on the team Auth0 tenant | Todo |
 | #52 | Noland | Hosting and staging instance | Todo |
-| #83 | Noland *(proposed)* | Deployment guide and handoff | Todo |
-| #77 | Margulan *(proposed)* | Roles assigned on the server | Todo |
-| #57 | Margulan *(proposed)* | Feedback and attachment endpoints by role | Todo; pairs with #72 |
+| #83 | Noland | Deployment guide and handoff | Todo |
+| #77 | Margulan | Roles assigned on the server | Todo |
+| #57 | Margulan | Feedback and attachment endpoints by role | Todo; pairs with #72 |
 | #81 | Margulan | Sponsor answers recorded | Todo |
 | #84 | Margulan | This record and the plan snapshot | In progress |
 | #45 | Margulan | Teammates confirmed on the team Auth0 tenant (carried) | In Progress |
