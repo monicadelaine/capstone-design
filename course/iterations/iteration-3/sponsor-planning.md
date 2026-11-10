@@ -5,7 +5,7 @@
 **Iteration 3 due:** to fill in
 **Status:** approved by the team 2026-11-10; not yet confirmed with the sponsor
 
-## Iteration 3 Goal (proposed)
+## Iteration 3 Goal
 
 One full semester runs on the deployed site without Django admin: the instructor imports students and approves projects, students rank, the solver proposes teams that the instructor can adjust and approve, and students and sponsors see their teams. The handoff docs let the next team deploy and continue.
 
