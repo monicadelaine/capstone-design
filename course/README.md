@@ -5,6 +5,7 @@
 - [presentations/](presentations/): preliminary and iteration presentation PDFs
 - [iterations/iteration-1/](iterations/iteration-1/): planning snapshot, sponsor planning record, review, retrospective
 - [iterations/iteration-2/](iterations/iteration-2/): sponsor planning record, snapshots, review, retrospective, demo script
+- [iterations/iteration-3/](iterations/iteration-3/): sponsor planning record (draft)
 - Iteration submission tags: `iteration-1-submission`, `iteration-2-submission`, `iteration-3-submission`
 
 ## Stand-ups
