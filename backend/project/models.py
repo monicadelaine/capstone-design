@@ -7,7 +7,6 @@ from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from user.models import Sponsor, Student
-from project.storage import S3MediaStorage
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,6 @@ class Attachment(models.Model):
     # [Optional] Stored file attachment. Leave blank when storing a link instead.
     file = models.FileField(
         upload_to=attachment_upload_path,
-        storage=S3MediaStorage(),
         blank=True,
         null=True,
         validators=[

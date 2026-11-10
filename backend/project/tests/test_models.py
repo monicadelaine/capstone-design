@@ -492,3 +492,57 @@ class TestAttachment:
         feedback.text = "Updated feedback"
         feedback.save()
         assert feedback.updated_at > original_updated_at
+
+
+class TestAttachmentStorage:
+    """#72: where attachment files live is decided by settings.STORAGES, not hard-wired in the model."""
+
+    def test_file_field_uses_the_configured_default_storage(self):
+        from django.core.files.storage import default_storage
+
+        assert Attachment._meta.get_field("file").storage is default_storage
+
+    @pytest.mark.django_db
+    def test_file_is_saved_to_and_removed_from_the_configured_storage(self, sample_project, settings):
+        from django.core.files.storage import default_storage
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        settings.STORAGES = {
+            "default": {"BACKEND": "django.core.files.storage.memory.InMemoryStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+
+        attachment = Attachment.objects.create(
+            project=sample_project,
+            file=SimpleUploadedFile("deck.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+        )
+
+        assert type(default_storage._wrapped).__name__ == "InMemoryStorage"
+        assert default_storage.exists(attachment.file.name)
+        assert attachment.file.read() == b"%PDF-1.4 test"
+
+        name = attachment.file.name
+        attachment.delete()
+
+        assert not default_storage.exists(name)
+
+    @pytest.mark.parametrize("env, backend", [
+        ({"DEBUG": "1"}, "project.storage.S3MediaStorage"),
+        ({"DEBUG": "0", "GS_BUCKET_NAME": ""}, "django.core.files.storage.FileSystemStorage"),
+        ({"DEBUG": "0", "GS_BUCKET_NAME": "example-bucket"}, "storages.backends.gcloud.GoogleCloudStorage"),
+    ])
+    def test_settings_choose_the_backend_for_each_environment(self, env, backend):
+        """Production with a bucket configured must use Google Cloud Storage for attachments."""
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        result = subprocess.run(
+            [sys.executable, "-c", "import core.settings as s; print(s.STORAGES['default']['BACKEND'])"],
+            env={**os.environ, **env, "DJANGO_SETTINGS_MODULE": "core.settings"},
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True, text=True, check=True,
+        )
+
+        assert result.stdout.strip() == backend

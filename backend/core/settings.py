@@ -145,20 +145,26 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_LOCATION = 'static'
 
+# Where uploaded files (Attachment.file) are stored is decided here, not in the model:
+#   development: the S3-compatible MinIO container (see project.storage.S3MediaStorage)
+#   production:  Google Cloud Storage when GS_BUCKET_NAME is set (block further down),
+#                otherwise the local MEDIA_ROOT, which is lost when the container is rebuilt
 if DEBUG:
-    STATICFILES_STORAGE = "project.storage.StaticS3Boto3Storage"
+    _DEFAULT_FILE_BACKEND = "project.storage.S3MediaStorage"
 else:
-    STORAGES = {
-        "default": {
-            "BACKEND": "django.core.files.storage.FileSystemStorage",
-        },
-        "staticfiles": {
-            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-        },
-    }
+    _DEFAULT_FILE_BACKEND = "django.core.files.storage.FileSystemStorage"
+
+STORAGES = {
+    "default": {
+        "BACKEND": _DEFAULT_FILE_BACKEND,
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 MEDIA_URL = '/media/'
-DEFAULT_FILE_STORAGE = "project.storage.S3MediaStorage"
+MEDIA_ROOT = BASE_DIR / 'media'
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
