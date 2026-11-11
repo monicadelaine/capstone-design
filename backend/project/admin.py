@@ -199,7 +199,7 @@ class AttachmentAdmin(ImportExportModelAdmin):
                 should_render_inline = True
         elif attachment.file:
             content = attachment.file.read()
-            filename = attachment.file.name.split('/')[-1]
+            filename = attachment.download_name
             guessed_type, _ = mimetypes.guess_type(filename)
             content_type = guessed_type or 'application/octet-stream'
 

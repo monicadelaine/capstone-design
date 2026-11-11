@@ -1,5 +1,7 @@
 import datetime
 import logging
+import os
+import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.core.validators import FileExtensionValidator, MinValueValidator, MaxValueValidator
@@ -75,7 +77,11 @@ class Project(models.Model):
 
 
 def attachment_upload_path(instance, filename):
-    return f'{instance.project.id}/{filename}'
+    """Store each upload under its project with a random name, so two uploads can never overwrite
+    each other and the uploader's filename never becomes part of the storage path. The original
+    name is kept in Attachment.original_filename."""
+    extension = os.path.splitext(filename)[1].lower()
+    return f'{instance.project_id or "unassigned"}/{uuid.uuid4().hex}{extension}'
 
 
 class Attachment(models.Model):
@@ -107,8 +113,17 @@ class Attachment(models.Model):
     # [Optional] Content for email exports (EML/HTML content stored as text)
     content = models.TextField(blank=True, null=True)
 
+    # [Default] The name the uploaded file had. The stored name is random (see attachment_upload_path).
+    original_filename = models.CharField(max_length=255, blank=True)
     # [Default] Tracks when the record was created
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def download_name(self):
+        """The filename to offer when this attachment is downloaded."""
+        if self.original_filename:
+            return self.original_filename
+        return self.file.name.rsplit('/', 1)[-1] if self.file else ''
 
     def clean(self):
         super().clean()
@@ -125,6 +140,9 @@ class Attachment(models.Model):
                 raise ValidationError('Provide only a file, link, or content.')
 
     def save(self, *args, **kwargs):
+        # A file that has not been stored yet still carries the name the user uploaded.
+        if self.file and not self.file._committed:
+            self.original_filename = os.path.basename(self.file.name)[:255]
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -144,7 +162,7 @@ class Attachment(models.Model):
         if self.link:
             return f'{self.project} (link)'
         if self.file:
-            return f'{self.project}{self.file.name[self.file.name.find("/"):]}'
+            return f'{self.project}/{self.download_name}'
         return str(self.project)
 
 

@@ -184,3 +184,28 @@ class TestPreferenceAdminAction:
         )]
         assert Assignment.objects.filter(
             student=sample_student, semester=matching_semester, project=first_project).exists()
+
+
+@pytest.mark.django_db
+class TestAttachmentAdminDownload:
+    def test_download_offers_the_original_filename(self, client, sample_project, settings):
+        from django.contrib.auth.models import User
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.urls import reverse
+
+        from project.models import Attachment
+
+        settings.STORAGES = {
+            "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+        client.force_login(User.objects.create_superuser("attachment-admin", "a@example.com", "x"))
+        attachment = Attachment.objects.create(
+            project=sample_project, file=SimpleUploadedFile("Spec Sheet.pdf", b"%PDF-1.4 spec"))
+
+        response = client.get(reverse("admin:project_attachment_download", args=[attachment.pk]))
+
+        assert response.status_code == 200
+        assert "Spec Sheet.pdf" in response["Content-Disposition"]
+        assert attachment.file.name.endswith(".pdf") and "Spec" not in attachment.file.name
+

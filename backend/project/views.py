@@ -77,7 +77,7 @@ class AttachmentDownloadAPIView(APIView):
             return Response({'error': 'This attachment does not have a file.'}, status=status.HTTP_400_BAD_REQUEST)
 
         file_handle = attachment.file.open('rb')
-        filename = attachment.file.name.rsplit('/', 1)[-1]
+        filename = attachment.download_name
         return FileResponse(file_handle, as_attachment=False, filename=filename)
 
 

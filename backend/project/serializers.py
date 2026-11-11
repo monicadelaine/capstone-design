@@ -91,6 +91,7 @@ class AttachmentSerializer(ModelSerializer):
     class Meta:
         model = Attachment
         fields = '__all__'
+        read_only_fields = ['original_filename']
 
 
 class SemesterSerializer(ModelSerializer):

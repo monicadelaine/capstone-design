@@ -546,3 +546,83 @@ class TestAttachmentStorage:
         )
 
         assert result.stdout.strip() == backend
+
+
+@pytest.fixture
+def in_memory_storage(settings):
+    """Keep uploaded test files in memory, overwriting same-named files like S3 and GCS do."""
+    settings.STORAGES = {
+        "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
+@pytest.mark.django_db
+class TestAttachmentFileNames:
+    """#72: uploads get random stored names, so the same filename never overwrites an earlier upload."""
+
+    @staticmethod
+    def upload(project, name="deck.pdf", content=b"%PDF-1.4 one"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return Attachment.objects.create(project=project, file=SimpleUploadedFile(name, content))
+
+    def test_same_filename_twice_keeps_both_files(self, sample_project, in_memory_storage):
+        from django.core.files.storage import default_storage
+
+        first = self.upload(sample_project, content=b"%PDF-1.4 first")
+        second = self.upload(sample_project, content=b"%PDF-1.4 second")
+
+        assert first.file.name != second.file.name
+        assert default_storage.open(first.file.name).read() == b"%PDF-1.4 first"
+        assert default_storage.open(second.file.name).read() == b"%PDF-1.4 second"
+
+    def test_stored_name_is_random_under_the_project_and_keeps_only_the_extension(self, sample_project, in_memory_storage):
+        import re
+
+        attachment = self.upload(sample_project, name="Quarterly Report (FINAL).PDF")
+
+        assert re.fullmatch(rf"{sample_project.id}/[0-9a-f]{{32}}\.pdf", attachment.file.name)
+        assert "Quarterly" not in attachment.file.name
+
+    def test_original_name_is_kept_for_downloads(self, sample_project, in_memory_storage):
+        attachment = self.upload(sample_project, name="Quarterly Report.pdf")
+        attachment.refresh_from_db()
+
+        assert attachment.original_filename == "Quarterly Report.pdf"
+        assert attachment.download_name == "Quarterly Report.pdf"
+        assert str(attachment) == f"{sample_project}/Quarterly Report.pdf"
+
+    def test_a_row_without_an_original_name_falls_back_to_the_stored_name(self, sample_project):
+        attachment = Attachment(project=sample_project)
+        attachment.file.name = f"{sample_project.id}/0123abcd.pdf"
+
+        assert attachment.original_filename == ""
+        assert attachment.download_name == "0123abcd.pdf"
+
+    def test_replacing_the_file_updates_the_original_name(self, sample_project, in_memory_storage):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        attachment = self.upload(sample_project, name="old.pdf")
+        attachment.file = SimpleUploadedFile("new.pdf", b"%PDF-1.4 new")
+        attachment.save()
+        attachment.refresh_from_db()
+
+        assert attachment.original_filename == "new.pdf"
+
+    def test_a_link_attachment_has_no_filename(self, sample_project):
+        attachment = Attachment.objects.create(project=sample_project, link="https://example.com/spec")
+
+        assert attachment.original_filename == "" and attachment.download_name == ""
+
+    def test_deleting_one_attachment_leaves_the_other_file(self, sample_project, in_memory_storage):
+        from django.core.files.storage import default_storage
+
+        first = self.upload(sample_project)
+        second = self.upload(sample_project)
+        first_name = first.file.name
+        first.delete()
+
+        assert not default_storage.exists(first_name)
+        assert default_storage.exists(second.file.name)
+

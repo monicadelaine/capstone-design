@@ -889,3 +889,47 @@ class TestSemesterAccess:
     def test_sponsor_cannot_delete_semester(self, sponsor_client, sample_semester):
         url = reverse("project:semester-detail", args=[sample_semester.id])
         assert sponsor_client.delete(url).status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.fixture
+def in_memory_storage(settings):
+    settings.STORAGES = {
+        "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
+@pytest.mark.django_db
+class TestAttachmentUploadAndDownload:
+    """#72: uploads keep their own file, and downloads offer the name the user uploaded."""
+
+    def upload(self, client, project, name, content):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return client.post(
+            reverse("project:attachment-list"),
+            {"project": project.id, "file": SimpleUploadedFile(name, content, content_type="application/pdf")},
+            format="multipart",
+        )
+
+    def test_two_uploads_with_the_same_name_are_both_kept(self, api_client, sample_project, in_memory_storage):
+        first = self.upload(api_client, sample_project, "deck.pdf", b"%PDF-1.4 first")
+        second = self.upload(api_client, sample_project, "deck.pdf", b"%PDF-1.4 second")
+
+        assert first.status_code == second.status_code == status.HTTP_201_CREATED
+        assert first.data["original_filename"] == second.data["original_filename"] == "deck.pdf"
+        bodies = []
+        for response in (first, second):
+            download = api_client.get(reverse("project:attachment-download", args=[response.data["id"]]))
+            bodies.append(b"".join(download.streaming_content))
+        assert bodies == [b"%PDF-1.4 first", b"%PDF-1.4 second"]
+
+    def test_download_offers_the_original_filename(self, api_client, sample_project, in_memory_storage):
+        created = self.upload(api_client, sample_project, "Project Spec v2.pdf", b"%PDF-1.4 spec")
+
+        response = api_client.get(reverse("project:attachment-download", args=[created.data["id"]]))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "Project Spec v2.pdf" in response["Content-Disposition"]
+        assert created.data["file"] != "Project Spec v2.pdf"
+
