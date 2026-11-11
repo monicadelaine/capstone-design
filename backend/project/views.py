@@ -76,9 +76,11 @@ class AttachmentDownloadAPIView(APIView):
         if not attachment.file:
             return Response({'error': 'This attachment does not have a file.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Uploaded files are untrusted: always offer them as a download, never render them in the page.
+        # (SecurityMiddleware already adds X-Content-Type-Options: nosniff to every response.)
         file_handle = attachment.file.open('rb')
         filename = attachment.download_name
-        return FileResponse(file_handle, as_attachment=False, filename=filename)
+        return FileResponse(file_handle, as_attachment=True, filename=filename)
 
 
 class SemesterViewSet(viewsets.ModelViewSet):

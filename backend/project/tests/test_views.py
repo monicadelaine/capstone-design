@@ -933,3 +933,19 @@ class TestAttachmentUploadAndDownload:
         assert "Project Spec v2.pdf" in response["Content-Disposition"]
         assert created.data["file"] != "Project Spec v2.pdf"
 
+    def test_download_is_always_an_attachment_and_never_sniffed(self, api_client, sample_project, in_memory_storage):
+        created = self.upload(api_client, sample_project, "deck.pdf", b"%PDF-1.4 deck")
+
+        response = api_client.get(reverse("project:attachment-download", args=[created.data["id"]]))
+
+        assert response["Content-Disposition"].startswith("attachment;")
+        assert response["Content-Type"] == "application/pdf"
+        assert response["X-Content-Type-Options"] == "nosniff"
+
+    def test_a_filename_with_quotes_cannot_break_the_header(self, api_client, sample_project, in_memory_storage):
+        created = self.upload(api_client, sample_project, 'Spec "v2"; final.pdf', b"%PDF-1.4 x")
+
+        response = api_client.get(reverse("project:attachment-download", args=[created.data["id"]]))
+
+        assert response["Content-Disposition"] == r'attachment; filename="Spec \"v2\"; final.pdf"'
+
