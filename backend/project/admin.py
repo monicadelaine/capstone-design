@@ -11,12 +11,14 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import content_disposition_header, urlencode
+from django.utils.text import Truncator
 from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
 from emails.notifications import NotificationError, notify_assignments_posted
 from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve_with_changes, propose
 from project.models import Project, Semester, Preference, Assignment, Feedback, Attachment
+from project.review import ReviewError, approve_project, current_semester, reject_project
 from project.resources import ProjectResource, SemesterResource, PreferenceResource, AssignmentResource, FeedbackResource, AttachmentResource
 
 logger = logging.getLogger(__name__)
@@ -41,11 +43,25 @@ class ProjectAdmin(ImportExportModelAdmin):
                 return Semester.objects.filter(id=self.value()).first().projects.all()
             return queryset
 
+    class ReviewFilter(admin.SimpleListFilter):
+        """Projects a sponsor submitted that the instructor has not approved or rejected yet (#67)."""
+
+        title = 'Review'
+        parameter_name = 'review'
+
+        def lookups(self, request, model_admin):
+            return [('pending', 'Waiting for review')]
+
+        def queryset(self, request, queryset):
+            if self.value() == 'pending':
+                return queryset.filter(status=Project.StatusChoices.PENDING, semester__isnull=True)
+            return queryset
+
     resource_classes = [ProjectResource]
 
     # TODO Add count of preferences, average rank of preferences
-    list_display = ['name', 'sponsor_link', 'status', 'semesters']
-    list_filter = ['status', SemesterFilter, 'sponsor']
+    list_display = ['name', 'sponsor_link', 'short_description', 'status', 'semesters']
+    list_filter = [ReviewFilter, 'status', SemesterFilter, 'sponsor']
     search_fields = ['name', 'sponsor', 'description']
     # TODO Order by rank of preferences
     ordering = ['-status', 'name']
@@ -70,6 +86,27 @@ class ProjectAdmin(ImportExportModelAdmin):
         class Meta:
             list_objects = True
             help_text = 'Are you sure you want to remove these projects from this semester?'
+
+    class ApproveProjectsActionForm(AdminActionForm):
+        semester = forms.ModelChoiceField(queryset=Semester.objects.all(), required=True)
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.fields['semester'].initial = current_semester()
+
+        class Meta:
+            list_objects = True
+            help_text = 'Approved projects are added to the semester, so its students can see and rank them.'
+
+    class RejectProjectsActionForm(AdminActionForm):
+        class Meta:
+            list_objects = True
+            help_text = ('Rejected projects are marked Cancelled and removed from every semester. '
+                         'Students never see them; the sponsor still does.')
+
+    @admin.display(description='Description')
+    def short_description(self, obj):
+        return Truncator(obj.description or '').chars(120)
 
     @admin.display(description='Sponsor')
     def sponsor_link(self, obj):
@@ -102,10 +139,30 @@ class ProjectAdmin(ImportExportModelAdmin):
         else:
             self.message_user(request, 'Filter the projects by a semester first', level='error')
 
+    # Instructor review of submitted projects (PBI-07, #67).
+    @action_with_form(ApproveProjectsActionForm, description='Approve for a semester')
+    def approve_projects(self, request, queryset, data):
+        for project in queryset:
+            approve_project(project, data['semester'])
+        self.message_user(request, f'Approved {queryset.count()} project(s) for {data["semester"]}.')
+
+    @action_with_form(RejectProjectsActionForm, description='Reject')
+    def reject_projects(self, request, queryset, data):
+        rejected = 0
+        for project in queryset:
+            try:
+                reject_project(project)
+                rejected += 1
+            except ReviewError as e:
+                self.message_user(request, str(e), level='error')
+        if rejected:
+            self.message_user(request, f'Rejected {rejected} project(s).')
+
     def semesters(self, obj):
         return Semester.objects.filter(projects=obj).count()
 
-    actions = [change_project_status_action, assign_project_to_semester, remove_project_from_semester]
+    actions = [approve_projects, reject_projects, change_project_status_action,
+               assign_project_to_semester, remove_project_from_semester]
 
 
 @admin.register(Attachment)
