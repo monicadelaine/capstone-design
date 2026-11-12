@@ -9,6 +9,9 @@
     .proposal td { vertical-align: top; }
     .rank-none { color: var(--error-fg); font-weight: bold; }
     .proposal-note { color: var(--body-quiet-color); }
+    .proposal tr.moved td.student-cell { background: var(--selected-row); }
+    .proposal .moved-tag { color: var(--body-quiet-color); font-size: 0.9em; }
+    .proposal select { max-width: 100%; }
 </style>
 {% endblock %}
 
@@ -23,36 +26,53 @@
 
 {% block content %}
 <div class="proposal">
-    <p class="proposal-note">This is a proposal. Nothing has been saved. Review it, then approve it to create the assignments.</p>
+    <p class="proposal-note">This is a proposal. Nothing has been saved. Move students with "Move to" if needed, then approve it to create the assignments. Team sizes are set on the semester; a project can set its own maximum.</p>
 
     <ul class="proposal-summary">
         <li><strong>{{ proposal.student_count }}</strong> students on <strong>{{ proposal.teams|length }}</strong> projects
-            (teams of {% if proposal.min_size == proposal.capacity %}{{ proposal.capacity }}{% else %}{{ proposal.min_size }} to {{ proposal.capacity }}{% endif %})</li>
+            (teams of {% if proposal.min_size == proposal.capacity %}{{ proposal.capacity }}{% else %}{{ proposal.min_size }} to {{ proposal.capacity }}{% endif %}{% if proposal.overrides %}; projects with their own maximum are marked{% endif %})</li>
         {% with counts=proposal.rank_counts %}
         <li>First choice: {{ counts.first }} &middot; Second: {{ counts.second }} &middot; Third: {{ counts.third }}
             &middot; <span{% if counts.unranked %} class="rank-none"{% endif %}>Not ranked: {{ counts.unranked }}</span></li>
         {% endwith %}
-        <li class="proposal-note">Solver result: {{ proposal.status|lower }} in {{ proposal.seconds|floatformat:2 }} s</li>
+        <li class="proposal-note">Solver result: {{ proposal.status|lower }} in {{ proposal.seconds|floatformat:2 }} s{% with moved=proposal.moved|length %}{% if moved %}, then {{ moved }} student{{ moved|pluralize }} moved by hand{% endif %}{% endwith %}</li>
     </ul>
+
+    {% if proposal.violations %}
+    <div class="errornote">
+        Fix these before approving:
+        <ul>{% for problem in proposal.violations %}<li>{{ problem }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
 
     {% if existing %}
     <p class="errornote">{{ existing }} assignment{{ existing|pluralize }} already exist{{ existing|pluralize:"s," }} for {{ proposal.semester }}. Approving replaces the project for every student in this proposal.</p>
     {% endif %}
 
+    <form method="post" action="{% url 'admin:project_semester_edit_assignments' %}" id="proposal-form">
+    {% csrf_token %}
+    <input type="hidden" name="token" value="{{ proposal.token }}">
     <table>
         <thead>
-            <tr><th>Project</th><th>Sponsor</th><th>Student</th><th>Their rank</th></tr>
+            <tr><th>Project</th><th>Sponsor</th><th>Student</th><th>Their rank</th><th>Move to</th></tr>
         </thead>
         <tbody>
         {% for team in proposal.teams %}
             {% for student, rank in team.members %}
-            <tr>
+            <tr{% if student.id in proposal.moved %} class="moved"{% endif %}>
                 {% if forloop.first %}
-                <td rowspan="{{ team.members|length }}"><strong>{{ team.project.name }}</strong></td>
+                <td rowspan="{{ team.members|length }}"><strong>{{ team.project.name }}</strong>{% if team.most != proposal.capacity %}<br><span class="proposal-note">up to {{ team.most }} student{{ team.most|pluralize }}</span>{% endif %}</td>
                 <td rowspan="{{ team.members|length }}">{{ team.project.sponsor }}</td>
                 {% endif %}
-                <td>{{ student }}</td>
+                <td class="student-cell">{{ student }}{% if student.id in proposal.moved %} <span class="moved-tag">(moved)</span>{% endif %}</td>
                 <td>{% if rank %}{{ rank }}{% else %}<span class="rank-none">not ranked</span>{% endif %}</td>
+                <td>
+                    <select name="move_{{ student.id }}" aria-label="Move {{ student }} to">
+                        {% for project in proposal.projects %}
+                        <option value="{{ project.id }}"{% if project.id == team.project.id %} selected{% endif %}>{{ project.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
             </tr>
             {% endfor %}
         {% endfor %}
@@ -63,13 +83,18 @@
     <p class="proposal-note">No team: {{ proposal.unused_projects|join:", " }}</p>
     {% endif %}
 
-    <form method="post" action="{% url 'admin:project_semester_approve_assignments' %}">
-        {% csrf_token %}
-        <input type="hidden" name="token" value="{{ proposal.token }}">
         <div class="submit-row">
-            <input type="submit" value="Approve and save assignments" class="default">
+            <input type="submit" value="Approve and save assignments" class="default"
+                   formaction="{% url 'admin:project_semester_approve_assignments' %}"{% if proposal.violations %} disabled{% endif %}>
+            <input type="submit" value="Re-check moves" id="recheck">
             <a href="{% url 'admin:project_semester_changelist' %}" class="button cancel-link">Discard</a>
         </div>
     </form>
 </div>
+<script>
+    // Re-check team sizes as soon as a student is moved; the button covers browsers without scripts.
+    document.querySelectorAll('#proposal-form select[name^="move_"]').forEach(function (select) {
+        select.addEventListener('change', function () { document.getElementById('recheck').click(); });
+    });
+</script>
 {% endblock %}
