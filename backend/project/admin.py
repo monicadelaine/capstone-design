@@ -15,7 +15,7 @@ from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
 from emails.notifications import NotificationError, notify_assignments_posted
-from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve_with_changes, propose
+from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve_with_changes, edit, pending_moves, propose
 from project.models import Project, Semester, Preference, Assignment, Feedback, Attachment
 from project.resources import ProjectResource, SemesterResource, PreferenceResource, AssignmentResource, FeedbackResource, AttachmentResource
 
@@ -272,6 +272,11 @@ class SemesterAdmin(ImportExportModelAdmin):
         except ProposalError as e:
             self.message_user(request, str(e), level='error')
             return None
+        return self.render_proposal(request, proposal)
+
+    actions = [propose_assignments]
+
+    def render_proposal(self, request, proposal):
         return TemplateResponse(request, 'admin/project/semester/assignment_proposal.html', {
             **self.admin_site.each_context(request),
             'opts': self.model._meta,
@@ -280,22 +285,48 @@ class SemesterAdmin(ImportExportModelAdmin):
             'existing': Assignment.objects.filter(semester=proposal.semester).count(),
         })
 
-    actions = [propose_assignments]
+    @staticmethod
+    def posted_moves(post):
+        """{student id: project id} from the proposal page's move_<student id> selects."""
+        moves = {}
+        for key, value in post.items():
+            if key.startswith('move_') and key[5:].isdigit() and value.isdigit():
+                moves[int(key[5:])] = int(value)
+        return moves
 
     def get_urls(self):
         custom_urls = [
             path('approve-assignments/', self.admin_site.admin_view(self.approve_assignments_view),
                  name='project_semester_approve_assignments'),
+            path('edit-assignments/', self.admin_site.admin_view(self.edit_assignments_view),
+                 name='project_semester_edit_assignments'),
         ]
         return custom_urls + super().get_urls()
+
+    # Move students between projects before approving (PBI-09, #69). Saves nothing.
+    def edit_assignments_view(self, request):
+        if request.method != 'POST':
+            return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
+        try:
+            proposal = edit(request.POST.get('token', ''), self.posted_moves(request.POST))
+        except ProposalError as e:
+            self.message_user(request, str(e), level='error')
+            return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
+        return self.render_proposal(request, proposal)
 
     def approve_assignments_view(self, request):
         if request.method != 'POST':
             return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
         if not (request.user.has_perm('project.add_assignment') and request.user.has_perm('project.change_assignment')):
             raise PermissionDenied
+        token = request.POST.get('token', '')
         try:
-            semester, created, updated, changed = approve_with_changes(request.POST.get('token', ''))
+            # Moves that were not re-checked yet: show the re-checked proposal instead of saving.
+            if pending_moves(token, self.posted_moves(request.POST)):
+                self.message_user(request, 'You moved students since the last check. Review the teams below, '
+                                           'then approve again.', level='warning')
+                return self.edit_assignments_view(request)
+            semester, created, updated, changed = approve_with_changes(token)
         except ProposalError as e:
             self.message_user(request, str(e), level='error')
             return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
