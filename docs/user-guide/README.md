@@ -6,6 +6,16 @@
 
 How to log in, submit a project, rank projects, and manage a semester. Written when the features are stable; until then see the v1 user guide in the prior team's repository for the inherited behaviour.
 
+## Instructor: review submitted projects
+
+When a sponsor submits a project it is Pending and students cannot see it. Review it in Django admin (`/admin/`).
+
+1. Go to Projects and choose **Waiting for review** in the Review filter on the right. Each row shows the sponsor and the start of the description; click a project to read all of it.
+2. Tick the projects you want to offer, choose **Approve for a semester** from the action menu, and click Go. Pick the semester (the current one is preselected) and confirm. Students in that semester can now see and rank them.
+3. Tick the projects you do not want, choose **Reject**, and confirm. They are marked Cancelled and removed from every semester. Students never see them; the sponsor still sees the project, marked Cancelled.
+
+A rejected project can be approved later, which restores it. A project cannot be rejected once students are assigned to it; reassign them first.
+
 ## Instructor: propose and approve assignments
 
 Do this after the ranking deadline, in Django admin (`/admin/`).
