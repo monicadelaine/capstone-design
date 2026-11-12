@@ -1,9 +1,12 @@
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import User
+from django.core import mail
 from django.http import HttpResponse
 from django.test import RequestFactory
+from django.urls import reverse
 
+from emails.models import EmailLog
 from project.models import Attachment, Project
 from user.admin import SponsorAdmin
 from user.models import Sponsor
@@ -57,7 +60,7 @@ def sample_project(db, sample_sponsor):
 class TestSponsorAdminActions:
     def test_send_sponsor_outreach_email_posts_to_email_client(self, rf, admin_user, sample_sponsor, monkeypatch):
         admin_instance = SponsorAdmin(Sponsor, admin.site)
-        request = rf.post("/", {"semester": "fall", "collection_date": "Fall 2026 (9/20/26)"})
+        request = rf.post("/", {"semester": "fall", "collection_date": "Fall 2026 (9/20/26)", "apply": "Send Email"})
         request.user = admin_user
         sent_calls = []
         redirects = []
@@ -101,7 +104,7 @@ class TestSponsorAdminActions:
     def test_send_project_presentation_email_sends_for_each_project(self, rf, admin_user, sample_sponsor, sample_project, monkeypatch):
         second_project = Project.objects.create(name="Second Project", sponsor=sample_sponsor)
         admin_instance = SponsorAdmin(Sponsor, admin.site)
-        request = rf.post("/", {"date": "2026-10-10", "time": "10:00 AM", "zoom_details": "Zoom"})
+        request = rf.post("/", {"date": "2026-10-10", "time": "10:00 AM", "zoom_details": "Zoom", "apply": "Send Emails"})
         request.user = admin_user
         sent_calls = []
         admin_instance.message_user = lambda *args, **kwargs: None
@@ -178,3 +181,84 @@ class TestSponsorAdminRenderFlows:
         assert response.status_code == 200
         assert captured["template_name"] == "admin/sponsor_outreach_action.html"
         assert captured["context"]["selected_ids"] == [sample_sponsor.id]
+
+
+@pytest.fixture
+def staff_user(db):
+    return User.objects.create_superuser(username="staffer", email="staffer@example.com", password="testpass123")
+
+
+@pytest.fixture
+def staff_client(client, staff_user):
+    client.force_login(staff_user)
+    return client
+
+
+@pytest.mark.django_db
+class TestSponsorEmailFlow:
+    """PBI-13 (#73): preview before sending, no credential fields, every send logged."""
+
+    def post(self, client, action, sponsor, **fields):
+        return client.post(reverse("admin:user_sponsor_changelist"), {
+            "action": action, "_selected_action": [sponsor.pk], **fields})
+
+    @pytest.mark.parametrize("action", ["send_sponsor_outreach_email", "send_project_presentation_email"])
+    def test_forms_have_no_credential_or_sender_fields(self, staff_client, sample_sponsor, action):
+        content = self.post(staff_client, action, sample_sponsor).content.decode().lower()
+
+        assert "smtp" not in content
+        assert 'name="password"' not in content and "from_email" not in content
+
+    def test_outreach_preview_shows_subject_and_recipients_and_sends_nothing(self, staff_client, sample_sponsor):
+        response = self.post(staff_client, "send_sponsor_outreach_email", sample_sponsor,
+                             semester="fall", collection_date="Fall 2026", preview_btn="Show Preview")
+
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "UA CS Capstone Project Opportunity - Fall" in content
+        assert sample_sponsor.email in content
+        assert 'name="apply"' in content
+        assert mail.outbox == [] and EmailLog.objects.count() == 0
+
+    def test_outreach_form_without_a_preview_offers_no_send_button(self, staff_client, sample_sponsor):
+        content = self.post(staff_client, "send_sponsor_outreach_email", sample_sponsor).content.decode()
+
+        assert 'name="preview_btn"' in content and 'name="apply"' not in content
+
+    def test_outreach_send_is_logged_and_ignores_posted_credentials(self, staff_client, staff_user, sample_sponsor):
+        self.post(staff_client, "send_sponsor_outreach_email", sample_sponsor, semester="fall",
+                  collection_date="Fall 2026", apply="Send Email",
+                  smtp_host="smtp.evil.example", smtp_username="x", smtp_password="hunter2", from_email="boss@evil.example")
+
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].to == [sample_sponsor.email]
+        assert mail.outbox[0].from_email != "boss@evil.example"
+        log = EmailLog.objects.get()
+        assert (log.kind, log.recipients, log.sent_by, log.success) == (
+            "sponsor_outreach", [sample_sponsor.email], staff_user.get_username(), True)
+
+    def test_presentation_preview_then_send_logs_one_email_per_project(self, staff_client, staff_user, sample_sponsor, sample_project):
+        Project.objects.create(name="Second Project", sponsor=sample_sponsor)
+        fields = {"date": "Tue Nov 10", "time": "3:45", "zoom_details": "https://zoom.example/1"}
+
+        preview = self.post(staff_client, "send_project_presentation_email", sample_sponsor,
+                            preview_btn="Show Preview", **fields).content.decode()
+        assert "Project Presentation:" in preview and sample_sponsor.email in preview
+        assert mail.outbox == [] and EmailLog.objects.count() == 0
+
+        self.post(staff_client, "send_project_presentation_email", sample_sponsor, apply="Send Emails", **fields)
+
+        assert len(mail.outbox) == 2
+        assert set(EmailLog.objects.values_list("kind", "sent_by")) == {("project_presentation", staff_user.get_username())}
+        assert EmailLog.objects.count() == 2
+
+
+@pytest.mark.django_db
+class TestEmailLogAdmin:
+    def test_log_is_visible_but_read_only(self, staff_client):
+        log = EmailLog.objects.create(kind="custom", subject="Hello", recipients=["a@example.com"], sent_by="admin")
+
+        assert staff_client.get(reverse("admin:emails_emaillog_changelist")).status_code == 200
+        assert staff_client.get(reverse("admin:emails_emaillog_add")).status_code == 403
+        assert staff_client.post(reverse("admin:emails_emaillog_delete", args=[log.pk]), {"post": "yes"}).status_code == 403
+        assert EmailLog.objects.filter(pk=log.pk).exists()

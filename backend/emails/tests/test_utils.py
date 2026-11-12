@@ -1,5 +1,7 @@
 import pytest
+from django.core import mail
 
+from emails.models import EmailLog
 from emails.utils import EmailClient
 
 
@@ -45,50 +47,58 @@ class TestEmailClient:
         assert len(calls) == 1
         assert calls[0]["recipient_list"] == ["single@example.com"]
 
-    def test_send_email_uses_custom_smtp_when_credentials_provided(self, monkeypatch):
-        client = EmailClient()
-        smtp_calls = []
-        email_instances = []
+    @pytest.mark.parametrize("field", ["smtp_host", "smtp_port", "smtp_username", "smtp_password"])
+    def test_send_email_does_not_accept_smtp_credentials(self, field):
+        with pytest.raises(TypeError):
+            EmailClient().send_email(
+                subject="Subject", message="Body", recipient_list=["a@example.com"], **{field: "x"}
+            )
+        assert EmailLog.objects.count() == 0
 
-        class FakeEmail:
-            def __init__(self, **kwargs):
-                self.kwargs = kwargs
-                self.alternatives = []
-                self.sent = False
-                email_instances.append(self)
-
-            def attach_alternative(self, html, content_type):
-                self.alternatives.append((html, content_type))
-
-            def send(self, fail_silently=False):
-                self.sent = True
-                return 1
-
-        def fake_smtp_backend(**kwargs):
-            smtp_calls.append(kwargs)
-            return object()
-
-        monkeypatch.setattr("emails.utils.SMTPBackend", fake_smtp_backend)
-        monkeypatch.setattr("emails.utils.EmailMultiAlternatives", FakeEmail)
-
-        client.send_email(
-            subject="Subject",
-            message="Body",
-            recipient_list=["a@example.com"],
-            html_message="<p>Body</p>",
-            smtp_host="smtp.example.com",
-            smtp_port=2525,
-            smtp_username="user",
-            smtp_password="pass",
+    def test_send_email_logs_a_successful_send(self):
+        EmailClient().send_email(
+            subject="Subject", message="Body", recipient_list=["a@example.com", "b@example.com"],
+            kind=EmailLog.Kind.SPONSOR_OUTREACH, sent_by="admin@example.com",
         )
 
-        assert len(smtp_calls) == 1
-        assert smtp_calls[0]["host"] == "smtp.example.com"
-        assert smtp_calls[0]["port"] == 2525
-        assert len(email_instances) == 1
-        assert email_instances[0].kwargs["to"] == ["a@example.com"]
-        assert email_instances[0].alternatives == [("<p>Body</p>", "text/html")]
-        assert email_instances[0].sent is True
+        assert len(mail.outbox) == 1
+        log = EmailLog.objects.get()
+        assert (log.kind, log.subject, log.sent_by, log.success, log.error) == (
+            "sponsor_outreach", "Subject", "admin@example.com", True, "")
+        assert log.recipients == ["a@example.com", "b@example.com"]
+        assert log.sent_at is not None
+
+    def test_send_email_logs_a_failure_and_reraises(self, monkeypatch):
+        def broken(**kwargs):
+            raise RuntimeError("smtp login failed")
+
+        monkeypatch.setattr("emails.utils.send_mail", broken)
+
+        with pytest.raises(RuntimeError, match="smtp login failed"):
+            EmailClient().send_email(subject="Subject", message="Body", recipient_list="a@example.com")
+
+        log = EmailLog.objects.get()
+        assert (log.success, log.error, log.recipients) == (False, "smtp login failed", ["a@example.com"])
+
+    def test_a_logging_problem_does_not_stop_the_email(self, monkeypatch):
+        def broken_create(**kwargs):
+            raise RuntimeError("database down")
+
+        monkeypatch.setattr("emails.utils.EmailLog.objects.create", broken_create)
+
+        EmailClient().send_email(subject="Subject", message="Body", recipient_list=["a@example.com"])
+
+        assert len(mail.outbox) == 1
+
+    def test_templated_senders_log_their_kind(self):
+        client = EmailClient()
+        client.send_sponsor_outreach(["a@example.com"], semester="fall", sent_by="admin")
+        client.send_project_presentation(
+            ["a@example.com"], date="d", time="t", project_name="p", project_description="x",
+            contact_name="c", contact_email="c@example.com", zoom_details="z", sent_by="admin")
+
+        assert list(EmailLog.objects.order_by("id").values_list("kind", "sent_by")) == [
+            ("sponsor_outreach", "admin"), ("project_presentation", "admin")]
 
     def test_send_templated_email_renders_html_and_calls_send_email(self, monkeypatch):
         client = EmailClient()
