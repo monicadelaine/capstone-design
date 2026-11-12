@@ -1,7 +1,8 @@
 """Propose student-project assignments with OR-Tools CP-SAT (PBI-04, #51).
 
 The admin runs a proposal for a semester, reviews it, can move students between projects
-(PBI-09, #69), and approves it. Nothing is saved until approval: the proposal travels between
+(PBI-09, #69), and approves it. Team sizes come from the semester, and a project can set its
+own maximum (PBI-08, #68). Nothing is saved until approval: the proposal travels between
 steps as a signed token, and only approval writes Assignment rows.
 Model and cost weights: docs/investigations/or-tools-evaluation.md
 """
@@ -28,14 +29,23 @@ class ProposalError(Exception):
     """The semester's data cannot produce an assignment. The message is shown to the admin."""
 
 
-def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, time_limit=10.0):
+def team_limits(project_id, capacity, min_size, overrides):
+    """(fewest, most) students for a project that gets a team. A project's own maximum replaces
+    the semester's team size; if that maximum is below the semester minimum, it is the minimum too."""
+    most = overrides.get(project_id, capacity)
+    return min(min_size, most), most
+
+
+def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, overrides=None, time_limit=10.0):
     """Put every student on exactly one project at the lowest total rank cost.
 
     prefs maps student id -> {project id: rank}. A project gets no students or between
     min_size and capacity of them; min_size defaults to capacity, so every team used is
-    exactly that size. Returns ({student id: project id}, solver status name).
+    exactly that size. overrides maps project id -> that project's own maximum.
+    Returns ({student id: project id}, solver status name).
     """
     min_size = capacity if min_size is None else min_size
+    overrides = overrides or {}
     if not 1 <= min_size <= capacity:
         raise ProposalError('Minimum team size must be between 1 and the team size.')
 
@@ -46,8 +56,9 @@ def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, time_li
     for p in project_ids:
         used = model.new_bool_var(f'used_{p}')
         size = sum(x[s, p] for s in prefs)
-        model.add(size >= min_size * used)
-        model.add(size <= capacity * used)
+        fewest, most = team_limits(p, capacity, min_size, overrides)
+        model.add(size >= fewest * used)
+        model.add(size <= most * used)
     model.minimize(sum(RANK_COST.get(prefs[s].get(p), UNRANKED_COST) * var for (s, p), var in x.items()))
 
     solver = cp_model.CpSolver()
@@ -56,8 +67,9 @@ def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, time_li
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         sizes = f'{capacity}' if min_size == capacity else f'{min_size} to {capacity}'
+        own = ' (some projects have their own maximum)' if overrides else ''
         raise ProposalError(
-            f'No assignment puts {len(prefs)} students into teams of {sizes}. '
+            f'No assignment puts {len(prefs)} students into teams of {sizes}{own}. '
             'Lower the minimum team size or change the team size.'
         )
     return {s: p for (s, p), var in x.items() if solver.value(var)}, solver.status_name(status)
@@ -67,6 +79,8 @@ def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, time_li
 class Team:
     project: Project
     members: list  # [(Student, rank or None)], best rank first
+    fewest: int
+    most: int
 
 
 @dataclass
@@ -79,6 +93,7 @@ class Proposal:
     capacity: int
     min_size: int
     solver_pairs: dict  # {student id: project id} as the solver proposed it, before any moves
+    overrides: dict  # {project id: that project's own maximum team size}
 
     @property
     def pairs(self):
@@ -100,11 +115,11 @@ class Proposal:
         problems = []
         for team in self.teams:
             size = len(team.members)
-            if size > self.capacity:
-                problems.append(f'{team.project.name} has {size} students; the most is {self.capacity}.')
-            elif size < self.min_size:
+            if size > team.most:
+                problems.append(f'{team.project.name} has {size} students; the most is {team.most}.')
+            elif size < team.fewest:
                 problems.append(f'{team.project.name} has {size} student{"" if size == 1 else "s"}; '
-                                f'the fewest is {self.min_size}.')
+                                f'the fewest is {team.fewest}.')
         return problems
 
     @property
@@ -128,6 +143,7 @@ class Proposal:
             'solver': [[s, p] for s, p in self.solver_pairs.items()],
             'capacity': self.capacity,
             'min_size': self.min_size,
+            'overrides': [[p, most] for p, most in self.overrides.items()],
             'status': self.status,
             'seconds': self.seconds,
         }, salt=TOKEN_SALT)
@@ -148,7 +164,7 @@ def _candidate_projects(semester):
     )
 
 
-def _build(semester, result, prefs, projects, status, seconds, capacity, min_size, solver_pairs):
+def _build(semester, result, prefs, projects, status, seconds, capacity, min_size, solver_pairs, overrides):
     """Turn {student id: project id} into a Proposal with each student's rank of their project."""
     students = Student.objects.in_bulk(list(result))
     teams, unused = [], []
@@ -156,17 +172,23 @@ def _build(semester, result, prefs, projects, status, seconds, capacity, min_siz
         members = [(students[s], prefs.get(s, {}).get(project.id)) for s, p in result.items() if p == project.id]
         if members:
             members.sort(key=lambda m: (m[1] or UNRANKED_COST, m[0].last_name, m[0].first_name))
-            teams.append(Team(project, members))
+            teams.append(Team(project, members, *team_limits(project.id, capacity, min_size, overrides)))
         else:
             unused.append(project)
-    return Proposal(semester, teams, unused, status, seconds, capacity, min_size, solver_pairs)
+    return Proposal(semester, teams, unused, status, seconds, capacity, min_size, solver_pairs, overrides)
 
 
-def propose(semester, capacity=DEFAULT_TEAM_SIZE, min_size=None):
+def propose(semester, capacity=None, min_size=None):
     """Solve the semester's assignment. Students are those with preferences for the semester;
-    projects are the semester's projects that are not cancelled. Saves nothing."""
+    projects are the semester's projects that are not cancelled. Team sizes are the semester's
+    team_size and min_team_size unless passed in, and a project's max_team_size replaces the
+    maximum for that project. Saves nothing."""
+    if capacity is None:
+        capacity = semester.team_size
+        min_size = semester.min_team_size if min_size is None else min_size
     min_size = capacity if min_size is None else min_size
     projects = _candidate_projects(semester)
+    overrides = {p.id: p.max_team_size for p in projects if p.max_team_size}
     prefs = {}
     for student_id, project_id, rank in Preference.objects.filter(semester=semester).values_list(
             'student_id', 'project_id', 'rank'):
@@ -176,17 +198,17 @@ def propose(semester, capacity=DEFAULT_TEAM_SIZE, min_size=None):
         raise ProposalError(f'{semester} has no projects. Add projects to the semester first.')
     if not prefs:
         raise ProposalError(f'No student has submitted preferences for {semester}.')
-    seats = capacity * len(projects)
+    seats = sum(overrides.get(p.id, capacity) for p in projects)
     if len(prefs) > seats:
         raise ProposalError(
-            f'{len(prefs)} students but only {seats} seats ({len(projects)} projects of {capacity}). '
-            'Raise the team size or add projects to the semester.'
+            f'{len(prefs)} students but only {seats} seats on {len(projects)} '
+            f'project{"" if len(projects) == 1 else "s"}. Raise the team size or add projects to the semester.'
         )
 
     started = time.perf_counter()
-    result, status = solve(prefs, [p.id for p in projects], capacity, min_size)
+    result, status = solve(prefs, [p.id for p in projects], capacity, min_size, overrides)
     seconds = time.perf_counter() - started
-    return _build(semester, result, prefs, projects, status, seconds, capacity, min_size, dict(result))
+    return _build(semester, result, prefs, projects, status, seconds, capacity, min_size, dict(result), overrides)
 
 
 def _apply(data, moves):
@@ -222,8 +244,10 @@ def edit(token, moves):
             semester=semester, student_id__in=list(result)).values_list('student_id', 'project_id', 'rank'):
         prefs.setdefault(student_id, {})[project_id] = rank
     solver_pairs = {s: p for s, p in data.get('solver', data['pairs'])}
+    overrides = {p: most for p, most in data.get('overrides', [])}
     return _build(semester, result, prefs, projects, data.get('status', ''), data.get('seconds'),
-                  data.get('capacity', DEFAULT_TEAM_SIZE), data.get('min_size', DEFAULT_TEAM_SIZE), solver_pairs)
+                  data.get('capacity', DEFAULT_TEAM_SIZE), data.get('min_size', DEFAULT_TEAM_SIZE),
+                  solver_pairs, overrides)
 
 
 def approve(token):
@@ -248,8 +272,11 @@ def approve_with_changes(token):
     sizes = {}
     for _, project_id in pairs:
         sizes[project_id] = sizes.get(project_id, 0) + 1
-    if any(not data.get('min_size', 1) <= n <= data.get('capacity', n) for n in sizes.values()):
-        raise ProposalError('Some teams are outside the team-size limits. Fix them before approving.')
+    overrides = {p: most for p, most in data.get('overrides', [])}
+    for project_id, size in sizes.items():
+        fewest, most = team_limits(project_id, data.get('capacity', size), data.get('min_size', 1), overrides)
+        if not fewest <= size <= most:
+            raise ProposalError('Some teams are outside the team-size limits. Fix them before approving.')
 
     created = updated = 0
     changed = []

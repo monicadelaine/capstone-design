@@ -15,7 +15,7 @@ from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
 from emails.notifications import NotificationError, notify_assignments_posted
-from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve_with_changes, edit, pending_moves, propose
+from project.assignment import ProposalError, approve_with_changes, edit, pending_moves, propose
 from project.models import Project, Semester, Preference, Assignment, Feedback, Attachment
 from project.resources import ProjectResource, SemesterResource, PreferenceResource, AssignmentResource, FeedbackResource, AttachmentResource
 
@@ -223,7 +223,7 @@ class SemesterAdmin(ImportExportModelAdmin):
     resource_classes = [SemesterResource]
 
     # TODO Add total preferences submitted and number of students with preferences submitted
-    list_display = ['semester', 'year', 'assignment_date', 'projects_count']
+    list_display = ['semester', 'year', 'assignment_date', 'team_sizes', 'projects_count']
     list_filter = search_fields = ['year', 'semester']
 
     @admin.display(description='Projects')
@@ -232,30 +232,19 @@ class SemesterAdmin(ImportExportModelAdmin):
         count = obj.projects.count()
         return format_html(f'<a href="{url}">{count}</a>')
 
-    class ProposeAssignmentsActionForm(AdminActionForm):
-        team_size = forms.IntegerField(min_value=1, initial=DEFAULT_TEAM_SIZE, help_text='Most students on one project.')
-        min_size = forms.IntegerField(
-            min_value=1, initial=DEFAULT_TEAM_SIZE, label='Minimum team size',
-            help_text='Fewest students on a project that is used. Lower it if students do not divide evenly.',
-        )
-
-        def clean(self):
-            cleaned = super().clean()
-            if cleaned.get('min_size') and cleaned.get('team_size') and cleaned['min_size'] > cleaned['team_size']:
-                raise forms.ValidationError('Minimum team size cannot be larger than the team size.')
-            return cleaned
-
-        class Meta:
-            help_text = 'Runs the solver on the selected semester. Nothing is saved until you approve the proposal.'
+    @admin.display(description='Team size')
+    def team_sizes(self, obj):
+        return obj.team_size if obj.min_team_size == obj.team_size else f'{obj.min_team_size} to {obj.team_size}'
 
     # Proposed assignments (PBI-04, #51): solve, show the table, save only on approval.
-    @action_with_form(ProposeAssignmentsActionForm, description='Propose assignments')
-    def propose_assignments(self, request, queryset, data):
+    # Team sizes come from the semester and its projects (PBI-08, #68), not from a form.
+    @admin.action(description='Propose assignments')
+    def propose_assignments(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(request, 'Select exactly one semester to propose assignments for.', level='error')
             return None
         try:
-            proposal = propose(queryset.get(), capacity=data['team_size'], min_size=data['min_size'])
+            proposal = propose(queryset.get())
         except ProposalError as e:
             self.message_user(request, str(e), level='error')
             return None

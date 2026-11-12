@@ -971,3 +971,35 @@ class TestAttachmentUploadAndDownload:
         listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
         assert [row["original_filename"] for row in listed.data] == ["mine.pdf"]
 
+
+
+@pytest.mark.django_db
+class TestProjectTeamSizeLimit:
+    """The per-project maximum team size (#68) is the instructor's to set."""
+
+    def test_sponsor_cannot_set_their_projects_maximum(self, sponsor_client, sample_project):
+        url = reverse('project:project-detail', args=[sample_project.id])
+
+        response = sponsor_client.patch(url, {'max_team_size': 9, 'description': 'Updated'}, format='json')
+
+        assert response.status_code == status.HTTP_200_OK
+        sample_project.refresh_from_db()
+        assert sample_project.max_team_size is None
+        assert sample_project.description == 'Updated'
+
+    def test_sponsor_cannot_set_it_when_creating(self, sponsor_client, sample_sponsor):
+        response = sponsor_client.post(reverse('project:project-list'),
+                                       {'name': 'New Project', 'sponsor': sample_sponsor.id, 'max_team_size': 9},
+                                       format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Project.objects.get(name='New Project').max_team_size is None
+
+    def test_admin_can_set_it(self, api_client, sample_project):
+        url = reverse('project:project-detail', args=[sample_project.id])
+
+        response = api_client.patch(url, {'max_team_size': 3}, format='json')
+
+        assert response.status_code == status.HTTP_200_OK
+        sample_project.refresh_from_db()
+        assert sample_project.max_team_size == 3

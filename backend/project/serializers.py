@@ -42,6 +42,9 @@ class ProjectSerializer(ModelSerializer):
 
     def validate(self, attrs):
         """On create, hold sponsors to their projects_allowed limit. Admins are exempt."""
+        if self._acting_sponsor() is not None:
+            # The team-size limit is the instructor's to set (#68), not the sponsor's.
+            attrs.pop('max_team_size', None)
         if self.instance is None and self._acting_sponsor() is not None:
             sponsor = attrs.get('sponsor')
             if sponsor is not None:
