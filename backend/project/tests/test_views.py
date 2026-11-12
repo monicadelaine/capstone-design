@@ -889,3 +889,85 @@ class TestSemesterAccess:
     def test_sponsor_cannot_delete_semester(self, sponsor_client, sample_semester):
         url = reverse("project:semester-detail", args=[sample_semester.id])
         assert sponsor_client.delete(url).status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.fixture
+def in_memory_storage(settings):
+    settings.STORAGES = {
+        "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
+@pytest.mark.django_db
+class TestAttachmentUploadAndDownload:
+    """#72: uploads keep their own file, and downloads offer the name the user uploaded."""
+
+    def upload(self, client, project, name, content):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return client.post(
+            reverse("project:attachment-list"),
+            {"project": project.id, "file": SimpleUploadedFile(name, content, content_type="application/pdf")},
+            format="multipart",
+        )
+
+    def test_two_uploads_with_the_same_name_are_both_kept(self, api_client, sample_project, in_memory_storage):
+        first = self.upload(api_client, sample_project, "deck.pdf", b"%PDF-1.4 first")
+        second = self.upload(api_client, sample_project, "deck.pdf", b"%PDF-1.4 second")
+
+        assert first.status_code == second.status_code == status.HTTP_201_CREATED
+        assert first.data["original_filename"] == second.data["original_filename"] == "deck.pdf"
+        bodies = []
+        for response in (first, second):
+            download = api_client.get(reverse("project:attachment-download", args=[response.data["id"]]))
+            bodies.append(b"".join(download.streaming_content))
+        assert bodies == [b"%PDF-1.4 first", b"%PDF-1.4 second"]
+
+    def test_download_offers_the_original_filename(self, api_client, sample_project, in_memory_storage):
+        created = self.upload(api_client, sample_project, "Project Spec v2.pdf", b"%PDF-1.4 spec")
+
+        response = api_client.get(reverse("project:attachment-download", args=[created.data["id"]]))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "Project Spec v2.pdf" in response["Content-Disposition"]
+        assert created.data["file"] != "Project Spec v2.pdf"
+
+    def test_download_is_always_an_attachment_and_never_sniffed(self, api_client, sample_project, in_memory_storage):
+        created = self.upload(api_client, sample_project, "deck.pdf", b"%PDF-1.4 deck")
+
+        response = api_client.get(reverse("project:attachment-download", args=[created.data["id"]]))
+
+        assert response["Content-Disposition"].startswith("attachment;")
+        assert response["Content-Type"] == "application/pdf"
+        assert response["X-Content-Type-Options"] == "nosniff"
+
+    def test_a_filename_with_quotes_cannot_break_the_header(self, api_client, sample_project, in_memory_storage):
+        created = self.upload(api_client, sample_project, 'Spec "v2"; final.pdf', b"%PDF-1.4 x")
+
+        response = api_client.get(reverse("project:attachment-download", args=[created.data["id"]]))
+
+        assert response["Content-Disposition"] == r'attachment; filename="Spec \"v2\"; final.pdf"'
+
+    def test_the_calls_the_project_page_makes(self, api_client, sample_sponsor, sample_project, in_memory_storage):
+        """The attachments panel lists by ?project=, adds a link as JSON, and deletes by id."""
+        other = Project.objects.create(name="Another Project", sponsor=sample_sponsor)
+        self.upload(api_client, sample_project, "mine.pdf", b"%PDF-1.4 mine")
+        self.upload(api_client, other, "theirs.pdf", b"%PDF-1.4 theirs")
+
+        listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
+        assert [row["original_filename"] for row in listed.data] == ["mine.pdf"]
+
+        added = api_client.post(
+            reverse("project:attachment-list"),
+            {"project": sample_project.id, "link": "https://example.com/brief"}, format="json")
+        assert added.status_code == status.HTTP_201_CREATED
+
+        listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
+        assert {row["link"] or row["original_filename"] for row in listed.data} == {"mine.pdf", "https://example.com/brief"}
+
+        removed = api_client.delete(reverse("project:attachment-detail", args=[added.data["id"]]))
+        assert removed.status_code in (status.HTTP_204_NO_CONTENT, status.HTTP_200_OK)
+        listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
+        assert [row["original_filename"] for row in listed.data] == ["mine.pdf"]
+

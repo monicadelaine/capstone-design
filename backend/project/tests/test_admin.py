@@ -184,3 +184,68 @@ class TestPreferenceAdminAction:
         )]
         assert Assignment.objects.filter(
             student=sample_student, semester=matching_semester, project=first_project).exists()
+
+
+@pytest.mark.django_db
+class TestAttachmentAdminDownload:
+    def test_download_offers_the_original_filename(self, client, sample_project, settings):
+        from django.contrib.auth.models import User
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.urls import reverse
+
+        from project.models import Attachment
+
+        settings.STORAGES = {
+            "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+        client.force_login(User.objects.create_superuser("attachment-admin", "a@example.com", "x"))
+        attachment = Attachment.objects.create(
+            project=sample_project, file=SimpleUploadedFile("Spec Sheet.pdf", b"%PDF-1.4 spec"))
+
+        response = client.get(reverse("admin:project_attachment_download", args=[attachment.pk]))
+
+        assert response.status_code == 200
+        assert "Spec Sheet.pdf" in response["Content-Disposition"]
+        assert attachment.file.name.endswith(".pdf") and "Spec" not in attachment.file.name
+
+    @pytest.mark.parametrize("name, content_type", [("diagram.png", "image/png"), ("notes.pdf", "application/pdf")])
+    def test_uploaded_files_are_never_rendered_inline(self, client, sample_project, settings, name, content_type):
+        from django.contrib.auth.models import User
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.urls import reverse
+
+        from project.models import Attachment
+
+        settings.STORAGES = {
+            "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+        client.force_login(User.objects.create_superuser("attachment-admin-2", "b@example.com", "x"))
+        attachment = Attachment.objects.create(project=sample_project, file=SimpleUploadedFile(name, b"data"))
+
+        response = client.get(reverse("admin:project_attachment_download", args=[attachment.pk]))
+
+        assert response["Content-Disposition"].startswith("attachment;")
+        assert response["Content-Type"] == content_type
+        assert response["X-Content-Type-Options"] == "nosniff"
+
+    def test_a_filename_with_quotes_cannot_break_the_header(self, client, sample_project, settings):
+        from django.contrib.auth.models import User
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.urls import reverse
+
+        from project.models import Attachment
+
+        settings.STORAGES = {
+            "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+        client.force_login(User.objects.create_superuser("attachment-admin-3", "c@example.com", "x"))
+        attachment = Attachment.objects.create(
+            project=sample_project, file=SimpleUploadedFile('Spec "v2"; final.pdf', b"%PDF-1.4 x"))
+
+        response = client.get(reverse("admin:project_attachment_download", args=[attachment.pk]))
+
+        assert response["Content-Disposition"] == r'attachment; filename="Spec \"v2\"; final.pdf"'
+

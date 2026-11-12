@@ -10,7 +10,7 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
-from django.utils.http import urlencode
+from django.utils.http import content_disposition_header, urlencode
 from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
@@ -199,25 +199,11 @@ class AttachmentAdmin(ImportExportModelAdmin):
                 should_render_inline = True
         elif attachment.file:
             content = attachment.file.read()
-            filename = attachment.file.name.split('/')[-1]
+            filename = attachment.download_name
             guessed_type, _ = mimetypes.guess_type(filename)
             content_type = guessed_type or 'application/octet-stream'
-
-            inline_types = {
-                'application/pdf',
-                'application/json',
-                'application/xml',
-                'text/plain',
-                'text/csv',
-                'text/html',
-            }
-            should_render_inline = (
-                content_type in inline_types
-                or content_type.startswith('image/')
-                or content_type.startswith('text/')
-                or content_type.startswith('audio/')
-                or content_type.startswith('video/')
-            )
+            # Uploaded files are untrusted: always a download, never rendered in the admin page.
+            should_render_inline = False
         elif attachment.link:
             # Redirect to external link if it's a link
             from django.shortcuts import redirect
@@ -226,8 +212,9 @@ class AttachmentAdmin(ImportExportModelAdmin):
             raise Http404('No content available')
 
         response = HttpResponse(content, content_type=content_type)
-        disposition = 'inline' if should_render_inline else 'attachment'
-        response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+        # Builds a correctly quoted/encoded header, so a filename containing quotes or non-ASCII
+        # characters cannot break out of the filename parameter.
+        response['Content-Disposition'] = content_disposition_header(not should_render_inline, filename)
         return response
 
 

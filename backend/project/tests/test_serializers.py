@@ -183,6 +183,17 @@ class TestAttachmentSerializer:
         assert serializer.data["url"].endswith("/api/v1/attachments/1/download/")
         assert serializer.data["file"] == "attachments/project-spec.pdf"
 
+    def test_original_filename_is_exposed_but_cannot_be_set_by_the_client(self, sample_project):
+        serializer = AttachmentSerializer(
+            data={"project": sample_project.id, "link": "https://example.com/spec", "original_filename": "forged.pdf"},
+        )
+
+        assert serializer.is_valid(), serializer.errors
+        attachment = serializer.save()
+
+        assert attachment.original_filename == ""
+        assert "original_filename" in AttachmentSerializer(instance=attachment).data
+
     def test_attachment_serializer_creates_link_attachment(self, sample_project):
         serializer = AttachmentSerializer(
             data={
