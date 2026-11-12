@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import ProjectAttachments from './ProjectAttachments.vue';
 
 const props = defineProps({
     project: {
@@ -76,6 +77,9 @@ function formatDate(dateString) {
                 </dd>
             </div>
         </dl>
+
+        <!-- This card only lists the signed-in sponsor's own projects, so they may add and remove files. -->
+        <ProjectAttachments v-if="showDetails" :project-id="props.project.id" can-edit />
 
         <button
             class="toggle-btn"

@@ -89,6 +89,36 @@ class ApiService {
     unique.forEach((id, idx) => { map[String(id)] = results[idx]; });
     return map;
   }
+
+  async getAttachments(projectId) {
+    const response = await this.client.get('/attachments/', { params: { project: projectId } });
+    return response.data;
+  }
+
+  async uploadAttachment(projectId, file) {
+    const form = new FormData();
+    form.append('project', projectId);
+    form.append('file', file);
+    const response = await this.client.post('/attachments/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
+  async addAttachmentLink(projectId, link) {
+    const response = await this.client.post('/attachments/', { project: projectId, link });
+    return response.data;
+  }
+
+  async deleteAttachment(attachmentId) {
+    await this.client.delete(`/attachments/${attachmentId}/`);
+  }
+
+  // The download endpoint needs the bearer token, so it cannot be a plain <a href>.
+  async downloadAttachment(attachmentId) {
+    const response = await this.client.get(`/attachments/${attachmentId}/download/`, { responseType: 'blob' });
+    return response.data;
+  }
 }
 
 export const apiService = new ApiService();

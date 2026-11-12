@@ -492,3 +492,137 @@ class TestAttachment:
         feedback.text = "Updated feedback"
         feedback.save()
         assert feedback.updated_at > original_updated_at
+
+
+class TestAttachmentStorage:
+    """#72: where attachment files live is decided by settings.STORAGES, not hard-wired in the model."""
+
+    def test_file_field_uses_the_configured_default_storage(self):
+        from django.core.files.storage import default_storage
+
+        assert Attachment._meta.get_field("file").storage is default_storage
+
+    @pytest.mark.django_db
+    def test_file_is_saved_to_and_removed_from_the_configured_storage(self, sample_project, settings):
+        from django.core.files.storage import default_storage
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        settings.STORAGES = {
+            "default": {"BACKEND": "django.core.files.storage.memory.InMemoryStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+
+        attachment = Attachment.objects.create(
+            project=sample_project,
+            file=SimpleUploadedFile("deck.pdf", b"%PDF-1.4 test", content_type="application/pdf"),
+        )
+
+        assert type(default_storage._wrapped).__name__ == "InMemoryStorage"
+        assert default_storage.exists(attachment.file.name)
+        assert attachment.file.read() == b"%PDF-1.4 test"
+
+        name = attachment.file.name
+        attachment.delete()
+
+        assert not default_storage.exists(name)
+
+    @pytest.mark.parametrize("env, backend", [
+        ({"DEBUG": "1"}, "project.storage.S3MediaStorage"),
+        ({"DEBUG": "0", "GS_BUCKET_NAME": ""}, "django.core.files.storage.FileSystemStorage"),
+        ({"DEBUG": "0", "GS_BUCKET_NAME": "example-bucket"}, "storages.backends.gcloud.GoogleCloudStorage"),
+    ])
+    def test_settings_choose_the_backend_for_each_environment(self, env, backend):
+        """Production with a bucket configured must use Google Cloud Storage for attachments."""
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        result = subprocess.run(
+            [sys.executable, "-c", "import core.settings as s; print(s.STORAGES['default']['BACKEND'])"],
+            env={**os.environ, **env, "DJANGO_SETTINGS_MODULE": "core.settings"},
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True, text=True, check=True,
+        )
+
+        assert result.stdout.strip() == backend
+
+
+@pytest.fixture
+def in_memory_storage(settings):
+    """Keep uploaded test files in memory, overwriting same-named files like S3 and GCS do."""
+    settings.STORAGES = {
+        "default": {"BACKEND": "project.tests.storages.OverwritingMemoryStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
+@pytest.mark.django_db
+class TestAttachmentFileNames:
+    """#72: uploads get random stored names, so the same filename never overwrites an earlier upload."""
+
+    @staticmethod
+    def upload(project, name="deck.pdf", content=b"%PDF-1.4 one"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return Attachment.objects.create(project=project, file=SimpleUploadedFile(name, content))
+
+    def test_same_filename_twice_keeps_both_files(self, sample_project, in_memory_storage):
+        from django.core.files.storage import default_storage
+
+        first = self.upload(sample_project, content=b"%PDF-1.4 first")
+        second = self.upload(sample_project, content=b"%PDF-1.4 second")
+
+        assert first.file.name != second.file.name
+        assert default_storage.open(first.file.name).read() == b"%PDF-1.4 first"
+        assert default_storage.open(second.file.name).read() == b"%PDF-1.4 second"
+
+    def test_stored_name_is_random_under_the_project_and_keeps_only_the_extension(self, sample_project, in_memory_storage):
+        import re
+
+        attachment = self.upload(sample_project, name="Quarterly Report (FINAL).PDF")
+
+        assert re.fullmatch(rf"{sample_project.id}/[0-9a-f]{{32}}\.pdf", attachment.file.name)
+        assert "Quarterly" not in attachment.file.name
+
+    def test_original_name_is_kept_for_downloads(self, sample_project, in_memory_storage):
+        attachment = self.upload(sample_project, name="Quarterly Report.pdf")
+        attachment.refresh_from_db()
+
+        assert attachment.original_filename == "Quarterly Report.pdf"
+        assert attachment.download_name == "Quarterly Report.pdf"
+        assert str(attachment) == f"{sample_project}/Quarterly Report.pdf"
+
+    def test_a_row_without_an_original_name_falls_back_to_the_stored_name(self, sample_project):
+        attachment = Attachment(project=sample_project)
+        attachment.file.name = f"{sample_project.id}/0123abcd.pdf"
+
+        assert attachment.original_filename == ""
+        assert attachment.download_name == "0123abcd.pdf"
+
+    def test_replacing_the_file_updates_the_original_name(self, sample_project, in_memory_storage):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        attachment = self.upload(sample_project, name="old.pdf")
+        attachment.file = SimpleUploadedFile("new.pdf", b"%PDF-1.4 new")
+        attachment.save()
+        attachment.refresh_from_db()
+
+        assert attachment.original_filename == "new.pdf"
+
+    def test_a_link_attachment_has_no_filename(self, sample_project):
+        attachment = Attachment.objects.create(project=sample_project, link="https://example.com/spec")
+
+        assert attachment.original_filename == "" and attachment.download_name == ""
+
+    def test_deleting_one_attachment_leaves_the_other_file(self, sample_project, in_memory_storage):
+        from django.core.files.storage import default_storage
+
+        first = self.upload(sample_project)
+        second = self.upload(sample_project)
+        first_name = first.file.name
+        first.delete()
+
+        assert not default_storage.exists(first_name)
+        assert default_storage.exists(second.file.name)
+
