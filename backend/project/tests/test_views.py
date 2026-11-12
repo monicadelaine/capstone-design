@@ -949,3 +949,25 @@ class TestAttachmentUploadAndDownload:
 
         assert response["Content-Disposition"] == r'attachment; filename="Spec \"v2\"; final.pdf"'
 
+    def test_the_calls_the_project_page_makes(self, api_client, sample_sponsor, sample_project, in_memory_storage):
+        """The attachments panel lists by ?project=, adds a link as JSON, and deletes by id."""
+        other = Project.objects.create(name="Another Project", sponsor=sample_sponsor)
+        self.upload(api_client, sample_project, "mine.pdf", b"%PDF-1.4 mine")
+        self.upload(api_client, other, "theirs.pdf", b"%PDF-1.4 theirs")
+
+        listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
+        assert [row["original_filename"] for row in listed.data] == ["mine.pdf"]
+
+        added = api_client.post(
+            reverse("project:attachment-list"),
+            {"project": sample_project.id, "link": "https://example.com/brief"}, format="json")
+        assert added.status_code == status.HTTP_201_CREATED
+
+        listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
+        assert {row["link"] or row["original_filename"] for row in listed.data} == {"mine.pdf", "https://example.com/brief"}
+
+        removed = api_client.delete(reverse("project:attachment-detail", args=[added.data["id"]]))
+        assert removed.status_code in (status.HTTP_204_NO_CONTENT, status.HTTP_200_OK)
+        listed = api_client.get(reverse("project:attachment-list"), {"project": sample_project.id})
+        assert [row["original_filename"] for row in listed.data] == ["mine.pdf"]
+

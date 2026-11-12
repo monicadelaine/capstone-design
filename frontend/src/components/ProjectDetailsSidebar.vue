@@ -1,4 +1,6 @@
 <script setup>
+import ProjectAttachments from './ProjectAttachments.vue';
+
 defineProps({
   project: { type: Object, default: null },
   sponsorDisplay: { type: String, default: 'Unknown' }
@@ -33,6 +35,9 @@ defineEmits(['close']);
           <li><strong>Created:</strong> {{ project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A' }}</li>
         </ul>
       </section>
+
+      <!-- Students can see and download; only the sponsor card (not this view) shows the edit controls. -->
+      <ProjectAttachments v-if="project" :key="project.id" :project-id="project.id" />
     </div>
   </aside>
 </template>

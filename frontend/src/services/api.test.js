@@ -19,6 +19,7 @@ describe('apiService', () => {
             get: vi.fn(),
             post: vi.fn(),
             put: vi.fn(),
+            delete: vi.fn(),
         }
     })
 
@@ -84,6 +85,57 @@ describe('apiService', () => {
         expect(map).toEqual({
             '1': { id: 1, first_name: 'A', last_name: null, name: 'A' },
             '2': null,
+        })
+    })
+    describe('attachments', () => {
+        it('lists the attachments of one project', async () => {
+            const { apiService } = await loadApiWithClient(fakeClient)
+            fakeClient.get.mockResolvedValueOnce({ data: [{ id: 1 }] })
+
+            await expect(apiService.getAttachments(7)).resolves.toEqual([{ id: 1 }])
+            expect(fakeClient.get).toHaveBeenCalledWith('/attachments/', { params: { project: 7 } })
+        })
+
+        it('uploads a file as multipart form data', async () => {
+            const { apiService } = await loadApiWithClient(fakeClient)
+            fakeClient.post.mockResolvedValueOnce({ data: { id: 2 } })
+            const file = new File(['%PDF'], 'spec.pdf')
+
+            await expect(apiService.uploadAttachment(7, file)).resolves.toEqual({ id: 2 })
+
+            const [url, body, config] = fakeClient.post.mock.calls[0]
+            expect(url).toBe('/attachments/')
+            expect(body).toBeInstanceOf(FormData)
+            expect(body.get('project')).toBe('7')
+            expect(body.get('file')).toBe(file)
+            expect(config.headers['Content-Type']).toBe('multipart/form-data')
+        })
+
+        it('adds a link to a project', async () => {
+            const { apiService } = await loadApiWithClient(fakeClient)
+            fakeClient.post.mockResolvedValueOnce({ data: { id: 3 } })
+
+            await apiService.addAttachmentLink(7, 'https://example.com')
+
+            expect(fakeClient.post).toHaveBeenCalledWith('/attachments/', { project: 7, link: 'https://example.com' })
+        })
+
+        it('deletes an attachment', async () => {
+            const { apiService } = await loadApiWithClient(fakeClient)
+            fakeClient.delete.mockResolvedValueOnce({})
+
+            await apiService.deleteAttachment(4)
+
+            expect(fakeClient.delete).toHaveBeenCalledWith('/attachments/4/')
+        })
+
+        it('downloads a file as a blob through the authenticated client', async () => {
+            const { apiService } = await loadApiWithClient(fakeClient)
+            const blob = new Blob(['x'])
+            fakeClient.get.mockResolvedValueOnce({ data: blob })
+
+            await expect(apiService.downloadAttachment(4)).resolves.toBe(blob)
+            expect(fakeClient.get).toHaveBeenCalledWith('/attachments/4/download/', { responseType: 'blob' })
         })
     })
 })
