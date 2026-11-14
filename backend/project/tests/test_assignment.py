@@ -5,7 +5,9 @@ from django.core import signing
 from django.urls import reverse
 from django.utils import timezone
 
-from project.assignment import TOKEN_SALT, ProposalError, approve, approve_with_changes, propose, solve
+from project.assignment import (
+    TOKEN_SALT, ProposalError, approve, approve_with_changes, edit, pending_moves, propose, solve,
+)
 from project.models import Assignment, Preference, Project, Semester
 from user.models import Sponsor, Student
 
@@ -173,6 +175,82 @@ class TestApprove:
 
 
 @pytest.mark.django_db
+class TestEdit:
+    @pytest.fixture
+    def proposal(self, semester, sponsor):
+        # Alpha: S0, S1 (first choice). Beta: S2, S3 (first choice). Gamma: no team.
+        alpha, beta, _ = make_projects(semester, sponsor, ['Alpha', 'Beta', 'Gamma'])
+        for i, s in enumerate(make_students(4)):
+            rank(s, *((alpha, beta) if i < 2 else (beta, alpha)))
+        return propose(semester, capacity=2)
+
+    @staticmethod
+    def ids(proposal):
+        alpha, beta = (team.project for team in proposal.teams)
+        s0, s1 = (m[0] for m in proposal.teams[0].members)
+        s2, s3 = (m[0] for m in proposal.teams[1].members)
+        return alpha, beta, s0, s1, s2, s3
+
+    def test_swap_recomputes_ranks_and_saves_nothing(self, proposal):
+        alpha, beta, s0, s1, s2, s3 = self.ids(proposal)
+
+        edited = edit(proposal.token(), {s0.id: beta.id, s2.id: alpha.id})
+
+        assert edited.pairs == {s0.id: beta.id, s1.id: alpha.id, s2.id: alpha.id, s3.id: beta.id}
+        assert edited.rank_counts == {'first': 2, 'second': 2, 'third': 0, 'unranked': 0}
+        assert edited.violations == []
+        assert edited.moved == {s0.id, s2.id}
+        assert Assignment.objects.count() == 0
+
+    def test_one_move_reports_both_team_sizes(self, proposal):
+        _, beta, s0, *_ = self.ids(proposal)
+
+        edited = edit(proposal.token(), {s0.id: beta.id})
+
+        assert edited.violations == ['Alpha has 1 student; the fewest is 2.', 'Beta has 3 students; the most is 2.']
+
+    def test_moves_build_on_the_last_check(self, proposal):
+        alpha, beta, s0, _, s2, _ = self.ids(proposal)
+
+        half = edit(proposal.token(), {s0.id: beta.id})
+        done = edit(half.token(), {s2.id: alpha.id})
+
+        assert done.violations == []
+        assert done.moved == {s0.id, s2.id}
+
+    def test_rejects_a_student_not_in_the_proposal(self, proposal):
+        alpha, *_ = self.ids(proposal)
+        outsider = Student.objects.create(cwid='99999999', first_name='Out', last_name='Sider', email='out@example.com')
+        with pytest.raises(ProposalError, match='not in this proposal'):
+            edit(proposal.token(), {outsider.id: alpha.id})
+
+    def test_rejects_a_project_not_on_the_semester(self, proposal, sponsor):
+        _, _, s0, *_ = self.ids(proposal)
+        elsewhere = Project.objects.create(name='Elsewhere', sponsor=sponsor)
+        with pytest.raises(ProposalError, match='not on'):
+            edit(proposal.token(), {s0.id: elsewhere.id})
+
+    def test_approve_saves_the_edited_proposal(self, proposal, semester):
+        alpha, beta, s0, _, s2, _ = self.ids(proposal)
+
+        approve(edit(proposal.token(), {s0.id: beta.id, s2.id: alpha.id}).token())
+
+        assert Assignment.objects.get(student=s0, semester=semester).project == beta
+        assert Assignment.objects.get(student=s2, semester=semester).project == alpha
+
+    def test_approve_refuses_teams_outside_the_size_limits(self, proposal):
+        _, beta, s0, *_ = self.ids(proposal)
+        with pytest.raises(ProposalError, match='outside the team-size limits'):
+            approve(edit(proposal.token(), {s0.id: beta.id}).token())
+        assert Assignment.objects.count() == 0
+
+    def test_pending_moves_counts_only_real_changes(self, proposal):
+        alpha, beta, s0, s1, *_ = self.ids(proposal)
+        assert pending_moves(proposal.token(), {s0.id: alpha.id, s1.id: alpha.id}) == 0
+        assert pending_moves(proposal.token(), {s0.id: beta.id, s1.id: alpha.id}) == 1
+
+
+@pytest.mark.django_db
 class TestSemesterAdminFlow:
     @pytest.fixture
     def cohort(self, semester, sponsor):
@@ -259,3 +337,53 @@ class TestSemesterAdminFlow:
         response = admin_client.get(reverse('admin:project_semester_approve_assignments'))
         assert response.status_code == 302
         assert Assignment.objects.count() == 0
+
+    def moves_for(self, proposal, changes):
+        """The move_<id> fields the proposal page posts: every student, with changes applied."""
+        return {f'move_{s}': changes.get(s, p) for s, p in proposal.pairs.items()}
+
+    def test_move_one_student_then_approve(self, admin_client, cohort):
+        # PBI-09 (#69): propose, move a student, approve, and the edited teams are saved.
+        proposal = self.run_action(admin_client, cohort, team_size=3, min_size=1).context['proposal']
+        alpha, beta = (team.project for team in proposal.teams)
+        mover = proposal.teams[0].members[0][0]
+
+        rechecked = admin_client.post(reverse('admin:project_semester_edit_assignments'),
+                                      {'token': proposal.token(), **self.moves_for(proposal, {mover.id: beta.id})})
+        edited = rechecked.context['proposal']
+        assert rechecked.status_code == 200
+        assert edited.violations == [] and edited.moved == {mover.id}
+        assert Assignment.objects.count() == 0
+
+        response = admin_client.post(reverse('admin:project_semester_approve_assignments'),
+                                     {'token': edited.token(), **self.moves_for(edited, {})})
+
+        assert response.status_code == 302
+        assert Assignment.objects.get(student=mover, semester=cohort).project == beta
+        assert Assignment.objects.filter(semester=cohort, project=alpha).count() == 1
+
+    def test_violations_are_shown_and_approve_is_disabled(self, admin_client, cohort):
+        proposal = self.run_action(admin_client, cohort).context['proposal']
+        beta = proposal.teams[1].project
+        mover = proposal.teams[0].members[0][0]
+
+        response = admin_client.post(reverse('admin:project_semester_edit_assignments'),
+                                     {'token': proposal.token(), **self.moves_for(proposal, {mover.id: beta.id})})
+
+        content = response.content.decode()
+        assert 'Fix these before approving' in content
+        assert 'Beta has 3 students; the most is 2.' in content
+        assert 'value="Approve and save assignments" class="default"' in content and ' disabled>' in content
+
+    def test_approve_with_unchecked_moves_rechecks_instead_of_saving(self, admin_client, cohort):
+        proposal = self.run_action(admin_client, cohort, team_size=3, min_size=1).context['proposal']
+        beta = proposal.teams[1].project
+        mover = proposal.teams[0].members[0][0]
+
+        response = admin_client.post(reverse('admin:project_semester_approve_assignments'),
+                                     {'token': proposal.token(), **self.moves_for(proposal, {mover.id: beta.id})})
+
+        assert response.status_code == 200
+        assert response.context['proposal'].moved == {mover.id}
+        assert Assignment.objects.count() == 0
+        assert any('since the last check' in str(m) for m in response.wsgi_request._messages)
