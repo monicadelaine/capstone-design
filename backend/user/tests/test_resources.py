@@ -3,10 +3,12 @@ import re
 
 import pytest
 import tablib
+from django.contrib import admin
 from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 
+from user.admin import StudentAdmin
 from user.models import Student
 from user.resources import StudentResource
 
@@ -311,3 +313,135 @@ class TestImportPermission:
         assert 'class="import_link"' not in viewer.get('/admin/user/student/').content.decode()
         assert 'class="import_link"' in registrar.get('/admin/user/student/').content.decode()
 
+
+@pytest.mark.django_db
+class TestPartialImportThroughTheAdmin:
+    """#66: bad rows are reported with their row number, and the good rows still import."""
+
+    BAD_ROW = b'cara@crimson.ua.edu,Cara,,Doe,,12AB,Senior,CS\n'
+    MIXED = TestImportThroughTheAdmin.CSV + BAD_ROW                        # two good rows, then row 3 is bad
+    CONFIRM = 'name="import_file_name"'
+
+    @pytest.fixture
+    def admin_client(self, client):
+        client.force_login(User.objects.create_superuser('boss', 'boss@example.com', 'x'))
+        return client
+
+    @staticmethod
+    def page(response):
+        return html.unescape(response.content.decode())
+
+    def test_the_preview_offers_confirm_and_says_which_rows_will_be_skipped(self, admin_client):
+        preview = TestImportThroughTheAdmin.upload(admin_client, self.MIXED)
+
+        text = self.page(preview)
+        assert self.CONFIRM in text
+        assert '1 row(s) have problems and will be skipped: row(s) 3' in text
+        assert 'CWID must be exactly 8 digits.' in text
+        assert Student.objects.count() == 0                                # still only a preview
+
+    def test_confirming_imports_the_good_rows_and_reports_the_skipped_ones(self, admin_client):
+        preview = TestImportThroughTheAdmin.upload(admin_client, self.MIXED)
+
+        confirmed = TestImportThroughTheAdmin.confirm(admin_client, preview)
+        landing = self.page(admin_client.get(confirmed.url))
+
+        assert confirmed.status_code == 302
+        assert sorted(Student.objects.values_list('cwid', flat=True)) == ['10000001', '10000002']
+        assert 'Import finished: 2 new' in landing
+        assert '1 row(s) were skipped because of problems: row(s) 3' in landing
+
+    def test_importing_the_corrected_file_adds_only_the_row_that_was_skipped(self, admin_client):
+        TestImportThroughTheAdmin.confirm(admin_client, TestImportThroughTheAdmin.upload(admin_client, self.MIXED))
+        assert Student.objects.count() == 2                                # the good rows landed the first time
+        fixed = TestImportThroughTheAdmin.CSV + b'cara@crimson.ua.edu,Cara,,Doe,,10000003,Senior,CS\n'
+
+        preview = TestImportThroughTheAdmin.upload(admin_client, fixed)
+        confirmed = TestImportThroughTheAdmin.confirm(admin_client, preview)
+
+        assert Student.objects.count() == 3
+        assert 'will be skipped' not in self.page(preview)
+        assert 'Import finished: 1 new, 0 updated, 0 deleted and 2 skipped' in self.page(admin_client.get(confirmed.url))
+
+    def test_a_file_where_every_row_is_bad_offers_no_confirm(self, admin_client):
+        header = TestImportThroughTheAdmin.CSV.split(b'\n')[0] + b'\n'
+
+        preview = TestImportThroughTheAdmin.upload(admin_client, header + self.BAD_ROW)
+
+        assert self.CONFIRM not in self.page(preview)
+        assert 'CWID must be exactly 8 digits.' in self.page(preview)
+
+    def test_rows_that_would_not_change_anything_do_not_make_confirm_appear(self, admin_client):
+        TestImportThroughTheAdmin.confirm(admin_client, TestImportThroughTheAdmin.upload(admin_client, TestImportThroughTheAdmin.CSV))
+
+        preview = TestImportThroughTheAdmin.upload(admin_client, self.MIXED)      # the good rows are unchanged
+
+        assert self.CONFIRM not in self.page(preview)
+
+    def test_a_clean_file_is_not_given_a_skipped_rows_warning(self, admin_client):
+        preview = TestImportThroughTheAdmin.upload(admin_client, TestImportThroughTheAdmin.CSV)
+        confirmed = TestImportThroughTheAdmin.confirm(admin_client, preview)
+
+        assert self.CONFIRM in self.page(preview) and 'will be skipped' not in self.page(preview)
+        assert 'were skipped because of problems' not in self.page(admin_client.get(confirmed.url))
+
+    def test_a_missing_column_still_blocks_the_import(self, admin_client):
+        preview = TestImportThroughTheAdmin.upload(admin_client, TestImportThroughTheAdmin.CSV.replace(b'CWID', b'CAMPUS_ID', 1))
+
+        assert self.CONFIRM not in self.page(preview)
+        assert Student.objects.count() == 0
+
+    def test_a_long_list_of_problem_rows_is_shortened(self, admin_client):
+        header = TestImportThroughTheAdmin.CSV.split(b'\n')[0] + b'\n'
+        good = b'ann@crimson.ua.edu,Ann,,Lee,,10000001,Senior,CS\n'
+        bad = b''.join(f'x{i}@crimson.ua.edu,X,,Y,,AB{i},Senior,CS\n'.encode() for i in range(12))
+
+        preview = TestImportThroughTheAdmin.upload(admin_client, header + good + bad)
+
+        assert '12 row(s) have problems' in self.page(preview)
+        assert 'and 2 more' in self.page(preview)
+
+
+@pytest.mark.django_db
+class TestFileEncodingMessage:
+    """A roster saved as Windows-1252 (Excel's plain "CSV (Comma delimited)") is explained in plain words."""
+
+    ROW = 'ann@crimson.ua.edu,{first},,Lee,,10000001,Senior,CS\n'
+
+    @staticmethod
+    def csv(first, encoding):
+        return ((','.join(HEADERS) + '\n') + TestFileEncodingMessage.ROW.format(first=first)).encode(encoding)
+
+    @pytest.fixture
+    def admin_client(self, client):
+        client.force_login(User.objects.create_superuser('boss', 'boss@example.com', 'x'))
+        return client
+
+    def test_a_windows_1252_file_is_refused_with_instructions_for_saving_as_utf8(self, admin_client):
+        response = TestImportThroughTheAdmin.upload(admin_client, self.csv('Jos\u00e9', 'cp1252'))
+
+        page = html.unescape(response.content.decode())
+        assert 'This file is not saved as UTF-8' in page
+        assert 'CSV UTF-8 (Comma delimited)' in page
+        assert 'UnicodeDecodeError' not in page
+        assert 'name="import_file_name"' not in page
+        assert Student.objects.count() == 0
+
+    def test_the_same_names_saved_as_utf8_import_correctly(self, admin_client):
+        preview = TestImportThroughTheAdmin.upload(admin_client, self.csv('Jos\u00e9', 'utf-8'))
+        TestImportThroughTheAdmin.confirm(admin_client, preview)
+
+        assert Student.objects.get(cwid='10000001').first_name == 'Jos\u00e9'
+
+    def test_other_read_failures_keep_the_librarys_own_message(self):
+        class Form:
+            errors = []
+
+            def add_error(self, field, message):
+                self.errors.append((field, str(message)))
+
+        form = Form()
+        StudentAdmin(Student, admin.site).add_data_read_fail_error_to_form(form, ValueError('boom'))
+
+        assert form.errors == [('import_file', "'ValueError' encountered while trying to read file. "
+                                               "Ensure you have chosen the correct format for the file.")]

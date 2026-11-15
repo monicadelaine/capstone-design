@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -317,3 +317,52 @@ class StudentAdmin(ImportExportModelAdmin):
         opts = self.opts
         return (request.user.has_perm(f'{opts.app_label}.add_{opts.model_name}')
                 and request.user.has_perm(f'{opts.app_label}.change_{opts.model_name}'))
+
+    @staticmethod
+    def rows_with_problems(result, limit=10):
+        """'3, 7' for the data rows that failed validation (the first row after the header is row 1)."""
+        numbers = [row.number for row in result.invalid_rows]
+        shown = ', '.join(str(n) for n in numbers[:limit])
+        return f'{shown} and {len(numbers) - limit} more' if len(numbers) > limit else shown
+
+    def import_action(self, request, **kwargs):
+        response = super().import_action(request, **kwargs)
+        context = getattr(response, 'context_data', None) or {}
+        result = context.get('result')
+        # The library offers Confirm only when every row is valid. #66 wants the good rows imported and
+        # the bad ones reported, so also offer it when the only problems are invalid rows (not database
+        # errors, which roll everything back) and at least one row would actually be created or updated.
+        if (result is not None and 'confirm_form' not in context and result.has_validation_errors()
+                and not result.has_errors() and result.totals['new'] + result.totals['update'] > 0):
+            context['confirm_form'] = self.create_confirm_form(request, import_form=context['form'])
+            self.message_user(
+                request,
+                f'{len(result.invalid_rows)} row(s) have problems and will be skipped: row(s) '
+                f'{self.rows_with_problems(result)}. The other rows will be imported when you confirm. '
+                'To fix the skipped rows, correct them in your file and import it again.',
+                level=messages.WARNING,
+            )
+        return response
+
+    def add_data_read_fail_error_to_form(self, form, e):
+        # A file saved with Excel's plain "CSV (Comma delimited)" is Windows-1252, not UTF-8, and cannot be
+        # read when it contains accented letters. The library's own message says only "UnicodeDecodeError".
+        if isinstance(e, UnicodeDecodeError):
+            form.add_error(
+                'import_file',
+                'This file is not saved as UTF-8, so some characters cannot be read (accented letters in names '
+                'are the usual cause). In Excel choose File > Save As and pick "CSV UTF-8 (Comma delimited)", '
+                'then upload it again. Nothing was imported.',
+            )
+        else:
+            super().add_data_read_fail_error_to_form(form, e)
+
+    def process_result(self, result, request):
+        if result.has_validation_errors():
+            self.message_user(
+                request,
+                f'{len(result.invalid_rows)} row(s) were skipped because of problems: row(s) '
+                f'{self.rows_with_problems(result)}. Correct them in your file and import it again.',
+                level=messages.WARNING,
+            )
+        return super().process_result(result, request)
