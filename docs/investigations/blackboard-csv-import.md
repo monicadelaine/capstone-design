@@ -54,20 +54,25 @@ The library's `has_import_permission` returns True when the setting is unset (ch
 
 ## Options
 
-**Matching and validation.** The four `Meta` options above, tested. Matching on CWID makes re-import safe and repeatable, which also makes it cheap to fix a bad file and upload it again.
+Status as of this branch: what was built, and in which commit, is marked **Done**.
+
+**Matching and validation. Done (`7fb1d7c`).** The four `Meta` options above. Matching on CWID makes re-import safe and repeatable, which also makes it cheap to fix a bad file and upload it again. Matching on CWID means a CWID repeated within one file would silently overwrite the earlier row, so a repeat is reported as a row error instead.
 
 **Partial import ("good rows still import").**
-- **A. All-or-nothing in the admin, no custom code.** The instructor fixes the listed rows and uploads the whole file again; unchanged rows are skipped, so this is harmless. It does not meet the letter of #66.
-- **B. Offer Confirm when only validation errors remain.** Override `import_action` in `StudentAdmin` so the confirm form is added to the page when `not result.has_errors()`, with a line such as "5 rows will be skipped". The library already keeps the good rows. Small custom code against library internals (version pinned at 4.4.3); **not tested.**
-- **C. Skip the preview** (`IMPORT_EXPORT_SKIP_ADMIN_CONFIRM`). The instructor loses the chance to look first. Not recommended.
+- **A. All-or-nothing in the admin, no custom code.** Not chosen: it does not meet the letter of #66.
+- **B. Offer Confirm when only validation errors remain. Done (`e3b95d0`).** `StudentAdmin.import_action` adds the confirm form when the only problems are invalid rows (not database errors, which roll everything back) and at least one row would be created or updated, with a warning that names the rows that will be skipped (shortened after ten). After the import a second warning lists them, so the instructor knows what to correct; the corrected file can be imported whole, because rows already imported are skipped as unchanged. Confirm is still withheld when every row is bad, when nothing would change, and for hard errors such as a missing column. Tested through the real admin pages (`TestPartialImportThroughTheAdmin`). It relies on library internals (version pinned at 4.4.3).
+- **C. Skip the preview** (`IMPORT_EXPORT_SKIP_ADMIN_CONFIRM`). Not used: the instructor would lose the chance to look first.
 
 **Permission.**
-- **Setting `IMPORT_EXPORT_IMPORT_PERMISSION_CODE = 'add'`** closes all eight import pages with one line. Tested on the Student import.
-- Overriding `has_import_permission` on `StudentAdmin` only is narrower and leaves the other seven open.
+- **Override `has_import_permission` on `StudentAdmin`. Done (`e83f873`).** Importing needs both the add and the change permission on Student. One override covers the upload page, the confirm step and the Import button, and a confirm step replayed by an account without the permission is refused. Tested (`TestImportPermission`).
+- **Setting `IMPORT_EXPORT_IMPORT_PERMISSION_CODE = 'add'`. Not applied.** It would close all eight import pages with one line (tested on the Student import), but it also changes the other seven, which is beyond #66. Those seven (Assignment, Attachment, Feedback, Preference, Project, Semester, Sponsor) are still open to a staff account with no permissions. **Open:** decide whether to set it.
 
-**Encoding.** Document "save as CSV UTF-8" for the instructor (no code), and/or make the Student import fall back to Windows-1252 when UTF-8 fails (a small custom format class, **not tested**), and/or give a clearer error message.
+**Encoding.**
+- **A clearer error message. Done (`e3b95d0`).** A file that is not UTF-8 is refused with a message saying so and how to save it as "CSV UTF-8 (Comma delimited)". Every other read failure keeps the library's message. Tested (`TestFileEncodingMessage`).
+- **"Save as CSV UTF-8" in the instructor documentation. Not written yet.**
+- **Fall back to Windows-1252 when UTF-8 fails. Not implemented, and not recommended unless the real roster turns out to be Windows-1252.** It would turn a loud failure into a possible silent one (a Mac Roman file would decode without an error, as the wrong characters), and it cannot recover characters Excel already replaced with `?` when saving.
 
-**Headers and emails.** A `before_import` step that strips and upper-cases header names, checks that all eight required columns exist and names any that are missing; and in `before_import_row`, strip and lower-case the email. Both are small and untested. A row whose email already belongs to a different CWID should be reported as an error, not create a second Student (email uniqueness as a constraint is already on the planned list in `development-guide/data-model.md`).
+**Headers and emails. Done (`7fb1d7c`).** `before_import` strips and upper-cases header names (and a leading BOM) and checks that `EMAIL`, `FIRST_NAME`, `LAST_NAME` and `CWID` exist, naming any that are missing; the other four columns may be absent, and an absent column no longer blanks existing values on re-import. `before_import_row` trims every value and lower-cases the email. A row whose email already belongs to a different CWID is reported as an error, not allowed to create a second Student. Email uniqueness as a database constraint is still on the planned list in `development-guide/data-model.md`; the import check is a stopgap, and emails stored before this change are not cleaned up.
 
 ## Risks and open questions
 
@@ -79,11 +84,12 @@ The library's `has_import_permission` returns True when the setting is unset (ch
 
 ## Recommendation
 
-1. In `StudentResource`: the four `Meta` options, header normalization with a clear missing-column error, email strip and lower-case, and a row error for an email that already belongs to another CWID.
-2. Set `IMPORT_EXPORT_IMPORT_PERMISSION_CODE = 'add'`, with a test per admin that a non-admin gets 403.
-3. Partial import: option B, with option A as the fallback if the override proves fiddly. **TODO:** confirm with the instructor that skipping bad rows is what she wants.
-4. Tests from the issue (valid file, duplicate CWID, missing column, non-admin 403) plus re-import, bad rows with row numbers, header variants and email normalization.
-5. A short instructor section in the user guide: save as CSV UTF-8, the expected header names, and how to read the preview.
+1. **Done (`7fb1d7c`).** In `StudentResource`: the four `Meta` options, header normalization with a clear missing-column error, email strip and lower-case, a row error for an email that belongs to another CWID, and a row error for a CWID repeated in the file.
+2. **Done for Student (`e83f873`)** as an override of `has_import_permission`. **Open:** whether to set `IMPORT_EXPORT_IMPORT_PERMISSION_CODE = 'add'` to close the other seven import pages, with a test per admin that a non-admin gets 403.
+3. **Done (`e3b95d0`)** as option B. **TODO:** confirm with the instructor that skipping bad rows is what she wants.
+4. **Done.** 42 tests in `user/tests/test_resources.py` cover the issue's list (valid file, duplicate CWID, missing column, non-admin 403) plus re-import, bad rows with row numbers, header variants, email normalization, partial import through the real admin pages and the encoding message.
+5. **Not done.** A short instructor section in the user guide: save as CSV UTF-8, the expected header names, and how to read the preview and the skipped-rows warnings.
+6. **Open.** Get a redacted real export from the instructor and check it against the assumptions in "Risks and open questions". Add the Windows-1252 fallback only if it turns out to be needed.
 
 ## Sources
 
