@@ -309,3 +309,11 @@ class StudentAdmin(ImportExportModelAdmin):
     list_filter = ['major_code', 'class_code']
     search_fields = ['last_name', 'first_name', 'cwid', 'email']
     ordering = ['last_name', 'first_name', 'cwid']
+
+    def has_import_permission(self, request):
+        # By default every staff account may import. A roster import creates students and updates
+        # existing ones, and a student is recognized at login because they are in this table, so it
+        # takes both permissions (the same rule approving assignments uses).
+        opts = self.opts
+        return (request.user.has_perm(f'{opts.app_label}.add_{opts.model_name}')
+                and request.user.has_perm(f'{opts.app_label}.change_{opts.model_name}'))

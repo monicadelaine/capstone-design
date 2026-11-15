@@ -3,8 +3,9 @@ import re
 
 import pytest
 import tablib
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client
 
 from user.models import Student
 from user.resources import StudentResource
@@ -235,3 +236,78 @@ class TestImportThroughTheAdmin:
 
         assert 'CWID must be exactly 8 digits.' in html.unescape(response.content.decode())
         assert Student.objects.count() == 0                      # preview only
+
+
+@pytest.mark.django_db
+class TestImportPermission:
+    """#66: only an admin can import. Importing a roster creates and updates students, so it takes both
+    the add and the change permission on Student."""
+
+    IMPORT_URL = '/admin/user/student/import/'
+
+    @classmethod
+    def post_roster(cls, client):
+        """Post the roster straight to the import page, the way someone who was refused would try."""
+        return client.post(cls.IMPORT_URL, {
+            'format': '0',
+            'import_file': SimpleUploadedFile('roster.csv', TestImportThroughTheAdmin.CSV, content_type='text/csv'),
+        })
+
+    @staticmethod
+    def staff(username, *codenames):
+        user = User.objects.create_user(username, password='x', is_staff=True)
+        user.user_permissions.add(*Permission.objects.filter(codename__in=codenames))
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def test_staff_with_no_permissions_cannot_open_or_use_the_import(self):
+        client = self.staff('nobody')
+
+        assert client.get(self.IMPORT_URL).status_code == 403
+        assert self.post_roster(client).status_code == 403
+        assert Student.objects.count() == 0
+
+    def test_the_confirm_step_cannot_be_replayed_by_someone_who_may_not_import(self):
+        boss = Client()
+        boss.force_login(User.objects.create_superuser('boss', 'boss@example.com', 'x'))
+        preview = TestImportThroughTheAdmin.upload(boss, TestImportThroughTheAdmin.CSV)
+        outsider = self.staff('nobody')
+        hidden = {m.group(1): html.unescape(m.group(2)) for m in re.finditer(
+            r'<input type="hidden" name="([^"]+)"[^>]*value="([^"]*)"', preview.content.decode())}
+
+        response = outsider.post('/admin/user/student/process_import/', hidden)
+
+        assert response.status_code == 403
+        assert Student.objects.count() == 0
+
+    @pytest.mark.parametrize('codenames', [
+        ('view_student',),
+        ('view_student', 'add_student'),
+        ('view_student', 'change_student'),
+        ('add_student',),
+        ('change_student',),
+    ], ids=['view only', 'view and add', 'view and change', 'add only', 'change only'])
+    def test_a_partial_set_of_student_permissions_is_not_enough(self, codenames):
+        client = self.staff('partial', *codenames)
+
+        assert client.get(self.IMPORT_URL).status_code == 403
+        assert self.post_roster(client).status_code == 403
+        assert Student.objects.count() == 0
+
+    def test_staff_with_add_and_change_permission_can_import(self):
+        client = self.staff('registrar', 'view_student', 'add_student', 'change_student')
+
+        preview = TestImportThroughTheAdmin.upload(client, TestImportThroughTheAdmin.CSV)
+        confirmed = TestImportThroughTheAdmin.confirm(client, preview)
+
+        assert preview.status_code == 200 and confirmed.status_code == 302
+        assert Student.objects.count() == 2
+
+    def test_the_import_button_is_shown_only_to_those_who_may_use_it(self):
+        viewer = self.staff('viewer', 'view_student')
+        registrar = self.staff('registrar', 'view_student', 'add_student', 'change_student')
+
+        assert 'class="import_link"' not in viewer.get('/admin/user/student/').content.decode()
+        assert 'class="import_link"' in registrar.get('/admin/user/student/').content.decode()
+
