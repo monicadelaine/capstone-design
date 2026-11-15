@@ -31,13 +31,14 @@
 
 Row numbers count data rows only: the header is not row 1.
 
-**File format** (uploaded through the real admin page):
+**File format** (uploaded through the real admin page). "Before" is the first run for this investigation; "Now" was re-run after the `StudentResource` and admin changes on this branch, with the confirmed import checked in the database.
 
-| File | Result |
-|---|---|
-| Plain UTF-8, UTF-8 with BOM (Excel "CSV UTF-8"), CRLF line endings, blank lines at the end, a quoted comma in a name | read correctly |
-| Header names with spaces around them, or in lower case | The preview shows one "New" row with every value blank and still offers **Confirm**. Confirming created a Student with a blank CWID, email and name. |
-| Windows-1252 file with one accented name (what Excel's plain "CSV (Comma delimited)" saves on Windows) | Refused with only "'UnicodeDecodeError' encountered while trying to read file. Ensure you have chosen the correct format for the file." The admin decodes uploads with a fixed `from_encoding = "utf-8-sig"`. |
+| File | Before | Now |
+|---|---|---|
+| Plain UTF-8, UTF-8 with BOM (Excel "CSV UTF-8"), CRLF line endings, blank lines at the end, a quoted comma in a name | read correctly | read correctly, and the stored values are right (`Test, Jr.` stays one name) |
+| Header names with spaces around them, or in lower case | The preview showed one "New" row with every value blank and still offered **Confirm**. Confirming created a Student with a blank CWID, email and name. | Headers are cleaned before they are matched, so both variants import correctly. Tests: `test_header_case_spacing_and_a_byte_order_mark_are_tolerated`; manual file `06-header-variants.csv`. |
+| UTF-8 file with accented names (José, Zoë) | not tested | imports, and the characters are stored correctly. Tests: `test_the_same_names_saved_as_utf8_import_correctly`; manual file `07a-accents-utf8.csv`. |
+| Windows-1252 file with one accented name (what Excel's plain "CSV (Comma delimited)" saves on Windows) | Refused with only "'UnicodeDecodeError' encountered while trying to read file. Ensure you have chosen the correct format for the file." | **Still refused**, with no Confirm and nothing imported, but the message now says the file is not saved as UTF-8 and how to save it as "CSV UTF-8 (Comma delimited)". Reading Windows-1252 files is not implemented (see Options, Encoding). Other read failures keep the library's message. Tests: `TestFileEncodingMessage`; manual file `07b-accents-windows-1252.csv`. The admin still decodes uploads with a fixed `from_encoding = "utf-8-sig"`. |
 
 **Permissions:**
 
@@ -91,4 +92,4 @@ The library's `has_import_permission` returns True when the setting is unset (ch
 - ADR-002: `docs/decisions/ADR-002-auth.md`
 - v1 import description: `docs/investigations/v1-reference.md`, section 2
 
-Drafted with Claude Code; Resarch, testing, validation, and revisions were done by me.
+Drafted with Claude Code; Research, testing, validation, and revisions were done by me.
