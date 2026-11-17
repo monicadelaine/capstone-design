@@ -125,6 +125,14 @@ class SemesterSerializer(ModelSerializer):
         model = Semester
         fields = '__all__'
 
+    def validate(self, attrs):
+        """The minimum team size cannot exceed the team size (#68). Model.clean() only runs in forms."""
+        team_size = attrs.get('team_size', getattr(self.instance, 'team_size', None))
+        min_team_size = attrs.get('min_team_size', getattr(self.instance, 'min_team_size', None))
+        if team_size is not None and min_team_size is not None and min_team_size > team_size:
+            raise ValidationError({'min_team_size': 'Minimum team size cannot be larger than the team size.'})
+        return attrs
+
 
 class PreferenceListSerializer(ListSerializer):
     def create(self, validated_data):

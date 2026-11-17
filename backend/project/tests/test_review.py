@@ -1,13 +1,13 @@
 import pytest
 from django.contrib import admin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
 from project.admin import ProjectAdmin
-from project.models import Assignment, Project, Semester
+from project.models import Assignment, Attachment, Project, Semester
 from project.review import ReviewError, approve_project, pending_projects, reject_project
 from project.tests.test_views import make_client
 from user.models import Sponsor, Student
@@ -308,4 +308,73 @@ class TestProjectAdminReview:
         response = admin_client.post(url, {**select, 'semester': semester.id})
 
         assert response.status_code == 302
+        assert list(semester.projects.all()) == [project]
+
+
+@pytest.mark.django_db
+class TestRejectedProjectsStayHidden:
+    """Follow-ups from the #96 review: every route that lists projects or their files hides rejected ones."""
+
+    @pytest.fixture
+    def rejected(self, project):
+        Attachment.objects.create(project=project, link='https://example.com/brief')
+        reject_project(project)
+        return project
+
+    def sponsor_projects(self, client, project):
+        response = client.get(reverse('user:sponsor-projects', args=[project.sponsor_id]))
+        assert response.status_code == status.HTTP_200_OK
+        return [p['name'] for p in response.data]
+
+    def attachments(self, client, project):
+        response = client.get(reverse('project:attachment-list'), {'project': project.id})
+        assert response.status_code == status.HTTP_200_OK
+        return response.data
+
+    def test_sponsor_projects_hides_it_from_students_and_other_sponsors(self, rejected, student_api, other_sponsor_api):
+        assert self.sponsor_projects(student_api, rejected) == []
+        assert self.sponsor_projects(other_sponsor_api, rejected) == []
+
+    def test_sponsor_projects_still_shows_it_to_its_sponsor_and_admins(self, rejected, sponsor_api, admin_api):
+        assert self.sponsor_projects(sponsor_api, rejected) == ['Route Planner']
+        assert self.sponsor_projects(admin_api, rejected) == ['Route Planner']
+
+    def test_attachments_of_a_rejected_project_are_hidden(self, rejected, student_api, other_sponsor_api, sponsor_api, admin_api):
+        assert self.attachments(student_api, rejected) == []
+        assert self.attachments(other_sponsor_api, rejected) == []
+        assert len(self.attachments(sponsor_api, rejected)) == 1
+        assert len(self.attachments(admin_api, rejected)) == 1
+
+    def test_attachment_by_id_is_hidden_too(self, rejected, student_api):
+        attachment = Attachment.objects.get(project=rejected)
+        response = student_api.get(reverse('project:attachment-detail', args=[attachment.id]))
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestReviewActionsNeedChangePermission:
+    """Follow-up from the #96 review: view-only staff cannot run project actions."""
+
+    @pytest.fixture
+    def view_only(self, client):
+        staff = User.objects.create_user('viewer', password='pw', is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(codename='view_project'))
+        client.force_login(staff)
+        return client
+
+    def test_actions_are_not_offered(self, view_only, project):
+        response = view_only.get(reverse('admin:project_project_changelist'))
+        assert response.status_code == 200
+        assert response.context['action_form'] is None or not any(
+            name in str(response.context['action_form'].fields['action'].choices)
+            for name in ('approve_projects', 'reject_projects', 'change_project_status_action'))
+
+    def test_posting_reject_anyway_changes_nothing(self, view_only, project, semester):
+        semester.projects.add(project)
+
+        view_only.post(reverse('admin:project_project_changelist'),
+                       {'action': 'reject_projects', 'index': 0, '_selected_action': [project.id]})
+
+        project.refresh_from_db()
+        assert project.status == Project.StatusChoices.PENDING
         assert list(semester.projects.all()) == [project]

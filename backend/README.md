@@ -25,7 +25,7 @@ A sponsor's project starts as Pending and on no semester, so students do not see
 | Approve | POST | ```/api/v1/projects/<id>/approve/``` with optional `{"semester": <id>}`; the current semester by default |
 | Reject | POST | ```/api/v1/projects/<id>/reject/``` |
 
-Approving adds the project to the semester, which puts it in the students' project list. Rejecting marks it Cancelled and removes it from every semester; it is then visible only to admins and its own sponsor, and it cannot be rejected once students are assigned to it. The same two actions are in Django admin under Projects ("Approve for a semester", "Reject"), with a "Waiting for review" filter. Logic: `project/review.py`.
+Approving adds the project to the semester, which puts it in the students' project list. Rejecting marks it Cancelled and removes it from every semester; it is then visible only to admins and its own sponsor (in the project list and detail, `/sponsors/<id>/projects/`, and its attachments; see `hide_rejected_projects` in `project/permissions.py`), and it cannot be rejected once students are assigned to it. The same two actions are in Django admin under Projects ("Approve for a semester", "Reject"), with a "Waiting for review" filter. Logic: `project/review.py`.
 
 ## Admin Panel - Email Actions
 
