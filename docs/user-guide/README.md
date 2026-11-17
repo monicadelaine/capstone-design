@@ -28,3 +28,5 @@ Do this after the ranking deadline, in Django admin (`/admin/`).
 6. Click **Approve and save assignments** to create the assignments, or **Discard** to leave everything as it was. Approving replaces the project for any student who already had an assignment that semester. What you approve is exactly what is on the page, including your moves. A proposal expires after an hour; run it again if needed.
 
 Only students who submitted preferences for the semester are included.
+
+**Approving publishes the assignments.** While you are only proposing or moving students, nothing is saved and nobody else can see it. The moment you approve, each assigned student can see their project, the sponsor's contact details and their teammates' names and emails, and each sponsor sees the students on their own projects, with their names and emails. Nobody sees another team. Assigning a student by hand from the Preferences list, without a proposal, shows them the same way right away.

@@ -18,7 +18,9 @@ const assignedProject = computed(() => {
 })
 
 const sponsor = ref(null)
-const otherAssignments = ref([])
+const team = ref([])
+
+const isYou = (a) => a.student === studentStore.profile?.id
 
 const sponsorName = computed(() => {
     if (sponsor && sponsor.value) {
@@ -49,33 +51,17 @@ onMounted(async () => {
             console.warn('StudentAssignmentCard: failed to load sponsor', sErr)
         }
 
-                // fetch other assignments for this project (includes this student)
-                try {
-                        const resp = await apiService.client.get(`/assignments/?project=${assignedProjectId.value}`)
-                        const assignments = Array.isArray(resp.data) ? resp.data : []
-
-                        // Collect student IDs that are not already expanded objects
-                        const studentIdsToFetch = assignments
-                            .map(a => (a.student && typeof a.student === 'object') ? a.student.id : a.student)
-                            .filter(Boolean)
-                            .map(String)
-                            .filter((v, i, arr) => arr.indexOf(v) === i)
-
-                        let studentMap = {}
-                        if (studentIdsToFetch.length) {
-                            studentMap = await apiService.getStudents(studentIdsToFetch)
-                        }
-
-                        // Replace numeric student ids with the fetched student objects when available
-                        otherAssignments.value = assignments.map(a => {
-                            const sid = (a.student && typeof a.student === 'object') ? a.student.id : a.student
-                            const lookup = sid ? studentMap[String(sid)] : null
-                            return { ...a, student: lookup || a.student }
-                        })
-                } catch (aErr) {
-                        console.warn('StudentAssignmentCard: failed to load other assignments', aErr)
-                        otherAssignments.value = []
-                }
+        // The team: everyone assigned to this project this semester. The API sends each student's name
+        // and email with the assignment, and only for the people this student is allowed to see.
+        try {
+            const rows = await apiService.getAssignments({ project: assignedProjectId.value })
+            const semester = assignment.value?.semester
+            team.value = (Array.isArray(rows) ? rows : [])
+                .filter(a => a.student_detail && (!semester || a.semester === semester))
+        } catch (aErr) {
+            console.warn('StudentAssignmentCard: failed to load the team', aErr)
+            team.value = []
+        }
     } catch (e) {
         console.error('StudentAssignmentCard init error', e)
     }
@@ -104,13 +90,14 @@ onMounted(async () => {
         <div class="card">
             <h2>Your Team</h2>
             <div class="team-info">
-                <div v-for="a in otherAssignments" :key="a.id">
-                    <div v-if="a.student && typeof a.student === 'object'" class="person-info">
-                        <div class="person-logo">{{ a.student.first_name.charAt(0) }}</div>
-                        <span class="team-member-name">{{ a.student.first_name }} {{ a.student.last_name }}</span>
+                <div v-for="a in team" :key="a.id" class="person-info">
+                    <div class="person-logo">{{ a.student_detail.first_name.charAt(0) }}</div>
+                    <div class="team-member-text">
+                        <span class="team-member-name">{{ a.student_detail.first_name }} {{ a.student_detail.last_name }}<template v-if="isYou(a)"> (you)</template></span>
+                        <a class="team-member-email" :href="'mailto:' + a.student_detail.email">{{ a.student_detail.email }}</a>
                     </div>
-                    <span v-else>Unknown</span>
                 </div>
+                <p v-if="team.length === 0" class="muted">No team members to show.</p>
             </div>
         </div>
     </div>
@@ -157,11 +144,20 @@ h4 {
     gap: 1rem;
     align-items: flex-start;
 }
+.team-member-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
 .team-member-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+.team-member-email {
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
 }
 .student-info ul { list-style: none; padding: 0; }
 </style>

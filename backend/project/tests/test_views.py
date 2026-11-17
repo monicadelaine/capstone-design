@@ -1,6 +1,9 @@
+import json
 from datetime import timedelta
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -10,6 +13,12 @@ from rest_framework.test import APIClient
 from project.models import Assignment, Feedback, Preference, Project, Semester
 from user.authentication import UserWrapper
 from user.models import Sponsor, Student
+
+
+def payload(response):
+    """The response data as text, for checking who is (and is not) in it. response.content is the
+    browsable API page, whose styles contain words like 'Out'."""
+    return json.dumps(response.data, default=str)
 
 
 def make_client(email, roles):
@@ -862,6 +871,67 @@ class TestAssignmentAccess:
 
         assert student_client.delete(url).status_code == status.HTTP_403_FORBIDDEN
         assert Assignment.objects.filter(pk=sample_assignment.id).exists()
+
+    # PBI-10 (#70) and PBI-11 (#71): the people on a team, with a way to contact them.
+
+    def test_a_student_gets_teammates_names_and_emails_and_nothing_more(self, student_client, assignments, other_student):
+        response = student_client.get(reverse("project:assignment-list"))
+
+        details = {a["student"]: a["student_detail"] for a in response.data}
+        assert details[other_student.id] == {
+            "id": other_student.id, "first_name": other_student.first_name,
+            "last_name": other_student.last_name, "email": other_student.email,
+        }
+        assert all(set(d) == {"id", "first_name", "last_name", "email"} for d in details.values())
+
+    def test_a_student_never_receives_another_teams_details(self, student_client, assignments, outsider):
+        response = student_client.get(reverse("project:assignment-list"))
+
+        body = payload(response)
+        assert outsider.email not in body and outsider.last_name not in body
+
+    def test_a_student_with_no_assignment_sees_nobody(self, student_client, sample_student, other_student, sample_project):
+        Assignment.objects.create(
+            student=other_student, semester=Semester.objects.create(
+                semester=Semester.Semester.FALL, year=2026, assignment_date=timezone.now() + timedelta(days=5)),
+            project=sample_project)
+
+        response = student_client.get(reverse("project:assignment-list"))
+
+        assert response.data == []
+        assert other_student.email not in payload(response)
+
+    def test_a_sponsor_gets_names_and_emails_for_their_own_projects_only(
+            self, sponsor_client, assignments, other_student, outsider):
+        response = sponsor_client.get(reverse("project:assignment-list"))
+
+        body = payload(response)
+        assert other_student.email in body and other_student.last_name in body
+        assert outsider.email not in body
+
+    def test_another_sponsor_sees_only_their_own_team(self, second_sponsor, assignments, sample_student, other_student, outsider):
+        client = make_client(second_sponsor.email, ["sponsor"])
+
+        response = client.get(reverse("project:assignment-list"))
+
+        body = payload(response)
+        assert outsider.email in body
+        assert sample_student.email not in body and other_student.email not in body
+
+    def test_student_details_do_not_add_a_query_per_assignment(self, student_client, assignments, sample_semester, sample_project):
+        def queries():
+            with CaptureQueriesContext(connection) as captured:
+                student_client.get(reverse("project:assignment-list"))
+            return len(captured)
+
+        small = queries()
+        for n in range(4):
+            mate = Student.objects.create(
+                cwid=f"3000000{n}", email=f"mate{n}@example.com", first_name="Mate", last_name=str(n),
+                class_code=Student.Class.SENIOR, major_code="CS")
+            Assignment.objects.create(student=mate, semester=sample_semester, project=sample_project)
+
+        assert queries() == small
 
 
 @pytest.mark.django_db

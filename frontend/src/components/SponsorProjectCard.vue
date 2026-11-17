@@ -7,6 +7,11 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    // The students assigned to this project: a list (possibly empty), or null if it could not be loaded.
+    students: {
+        type: Array,
+        default: null,
+    },
 });
 
 const showDetails = ref(false);
@@ -52,6 +57,18 @@ function formatDate(dateString) {
         <div class="quick-meta">
             <span><strong>Created:</strong> {{ formatDate(props.project.created_at) }}</span>
         </div>
+
+        <section class="team" aria-label="Assigned students">
+            <h3 class="team-title">Assigned students</h3>
+            <p v-if="props.students === null" class="team-note">Assigned students could not be loaded.</p>
+            <p v-else-if="props.students.length === 0" class="team-note">No students assigned yet.</p>
+            <ul v-else class="team-list">
+                <li v-for="student in props.students" :key="student.id">
+                    <span class="team-name">{{ student.first_name }} {{ student.last_name }}</span>
+                    <a :href="'mailto:' + student.email">{{ student.email }}</a>
+                </li>
+            </ul>
+        </section>
 
         <dl v-if="showDetails" class="details">
             <div>
@@ -133,6 +150,33 @@ h2 {
 
 .description {
     margin: 0 0 0.7rem 0;
+}
+
+.team-title {
+    margin: 0.75rem 0 0.25rem;
+    font-size: 1rem;
+}
+
+.team-note {
+    margin: 0;
+    color: var(--text-subtle);
+}
+
+.team-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.team-list li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    padding: 0.2rem 0;
+}
+
+.team-name {
+    font-weight: 600;
 }
 
 .quick-meta {

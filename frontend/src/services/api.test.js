@@ -87,6 +87,21 @@ describe('apiService', () => {
             '2': null,
         })
     })
+    describe('assignments', () => {
+        it('lists the assignments this user may see, with optional filters', async () => {
+            const { apiService } = await loadApiWithClient(fakeClient)
+            fakeClient.get.mockResolvedValue({ data: [{ id: '1-2', student_detail: { email: 'a@crimson.ua.edu' } }] })
+
+            await expect(apiService.getAssignments({ semester: 3 })).resolves.toEqual([
+                { id: '1-2', student_detail: { email: 'a@crimson.ua.edu' } },
+            ])
+            expect(fakeClient.get).toHaveBeenCalledWith('/assignments/', { params: { semester: 3 } })
+
+            await apiService.getAssignments()
+            expect(fakeClient.get).toHaveBeenLastCalledWith('/assignments/', { params: {} })
+        })
+    })
+
     describe('attachments', () => {
         it('lists the attachments of one project', async () => {
             const { apiService } = await loadApiWithClient(fakeClient)

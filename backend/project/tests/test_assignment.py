@@ -4,11 +4,13 @@ from django.core import mail
 from django.core import signing
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from project.assignment import (
     TOKEN_SALT, ProposalError, approve, approve_with_changes, edit, pending_moves, propose, solve,
 )
 from project.models import Assignment, Preference, Project, Semester
+from user.authentication import UserWrapper
 from user.models import Sponsor, Student
 
 
@@ -429,6 +431,33 @@ class TestSemesterAdminFlow:
 
         assert response.status_code == 403
         assert Assignment.objects.count() == 0
+
+    def test_students_and_sponsors_see_the_teams_only_once_the_proposal_is_approved(self, admin_client, cohort, sponsor):
+        # PBI-10 (#70) and PBI-11 (#71): approving the proposal is what publishes the assignments.
+        proposal = self.run_action(admin_client, cohort).context['proposal']
+        team, other_team = proposal.teams[0], proposal.teams[1]
+        student, mate = (m[0] for m in team.members[:2])
+        outsider = other_team.members[0][0]
+
+        def api_client(email, roles):
+            client = APIClient()
+            client.force_authenticate(user=UserWrapper({'email': email, 'sub': f'auth0|{email}', 'roles': roles}))
+            return client
+
+        as_student = api_client(student.email, [])
+        as_sponsor = api_client(sponsor.email, ['sponsor'])
+        url = reverse('project:assignment-list')
+
+        # Proposed, not approved: nothing is saved, so nobody sees anything.
+        assert as_student.get(url).data == [] and as_sponsor.get(url).data == []
+
+        admin_client.post(reverse('admin:project_semester_approve_assignments'), {'token': proposal.token()})
+
+        seen = as_student.get(url)
+        assert {a['student_detail']['email'] for a in seen.data} == {student.email, mate.email}
+        assert outsider.email not in {a['student_detail']['email'] for a in seen.data}
+        sponsor_sees = {a['student_detail']['email'] for a in as_sponsor.get(url).data}
+        assert sponsor_sees == {s.email for t in proposal.teams for s, _ in t.members}
 
     def test_approve_ignores_get(self, admin_client):
         response = admin_client.get(reverse('admin:project_semester_approve_assignments'))
