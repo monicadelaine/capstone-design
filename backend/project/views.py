@@ -17,7 +17,9 @@ from user.authentication import Auth0Authentication
 from .models import Assignment, Attachment, Feedback, Preference, Project, Semester
 from .permissions import (
     AdminWriteOrReadOnly,
+    AttachmentWritePermission,
     IsAdminRole,
+    SponsorFeedbackPermission,
     hide_rejected_projects,
     ProjectWritePermission,
     is_admin,
@@ -105,7 +107,7 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['project']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AttachmentWritePermission]
 
     def get_queryset(self):
         """A rejected project's files are hidden like the project itself (#67)."""
@@ -117,7 +119,9 @@ class AttachmentDownloadAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk, format=None):
-        attachment = get_object_or_404(Attachment, pk=pk)
+        # Direct downloads must honor the same rejected-project visibility as the list endpoint.
+        visible = hide_rejected_projects(Attachment.objects.all(), request.user, 'project__')
+        attachment = get_object_or_404(visible, pk=pk)
         if not attachment.file:
             return Response({'error': 'This attachment does not have a file.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -312,4 +316,12 @@ class FeedbackViewSet(viewsets.ModelViewSet):
     filterset_fields = ['sponsor', 'project', 'semester']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, SponsorFeedbackPermission]
+
+    def get_queryset(self):
+        if is_admin(self.request.user):
+            return Feedback.objects.all()
+        sponsor = sponsor_for_user(self.request.user)
+        if sponsor is None:
+            return Feedback.objects.none()
+        return Feedback.objects.filter(sponsor=sponsor, project__sponsor=sponsor)
