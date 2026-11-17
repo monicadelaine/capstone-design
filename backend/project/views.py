@@ -17,6 +17,7 @@ from user.authentication import Auth0Authentication
 from .models import Assignment, Attachment, Feedback, Preference, Project, Semester
 from .permissions import (
     AdminWriteOrReadOnly,
+    IsAdminRole,
     ProjectWritePermission,
     is_admin,
     owns_student_id,
@@ -28,9 +29,11 @@ from .serializers import (
     AttachmentSerializer,
     FeedbackSerializer,
     PreferenceSerializer,
+    ProjectReviewSerializer,
     ProjectSerializer,
     SemesterSerializer,
 )
+from .review import ReviewError, approve_project, pending_projects, reject_project
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +49,17 @@ class ProjectViewSet(viewsets.ModelViewSet):
     # Reads: any authenticated user. Writes: admins, or sponsors on their own projects.
     permission_classes = [IsAuthenticated, ProjectWritePermission]
 
+    def get_queryset(self):
+        """Rejected projects are hidden from everyone except admins and the owning sponsor (#67)."""
+        queryset = Project.objects.all()
+        if is_admin(self.request.user):
+            return queryset
+        rejected = Q(status=Project.StatusChoices.CANCELLED)
+        sponsor = sponsor_for_user(self.request.user)
+        if sponsor is not None:
+            rejected &= ~Q(sponsor=sponsor)
+        return queryset.exclude(rejected)
+
     # TODO Add error handling if a semester DNE for the current date
     def list(self, request, *args, **kwargs):
         """Override list method to filter projects by current semester."""
@@ -54,6 +68,39 @@ class ProjectViewSet(viewsets.ModelViewSet):
         queryset = self.filter_queryset(self.get_queryset().filter(semester=semester))
         serializer = ProjectSerializer(queryset, many=True)
         return Response(serializer.data)
+
+    # Instructor review of submitted projects (PBI-07, #67). Admin only.
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsAdminRole])
+    def pending(self, request):
+        """Projects waiting for review, oldest first, with their sponsor and description."""
+        return Response(ProjectReviewSerializer(pending_projects(), many=True).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsAdminRole])
+    def approve(self, request, pk=None):
+        """Put the project on a semester so students see it. Body: {"semester": id}, optional;
+        the current semester is used when it is left out."""
+        project = self.get_object()
+        semester = None
+        semester_id = request.data.get('semester')
+        if semester_id not in (None, ''):
+            semester = Semester.objects.filter(pk=semester_id).first() if str(semester_id).isdigit() else None
+            if semester is None:
+                return Response({'error': 'That semester does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            approve_project(project, semester)
+        except ReviewError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(ProjectReviewSerializer(project).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsAdminRole])
+    def reject(self, request, pk=None):
+        """Mark the project Cancelled and take it off every semester."""
+        project = self.get_object()
+        try:
+            reject_project(project)
+        except ReviewError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(ProjectReviewSerializer(project).data)
 
 
 class AttachmentViewSet(viewsets.ModelViewSet):

@@ -56,6 +56,26 @@ class ProjectSerializer(ModelSerializer):
         return attrs
 
 
+class ProjectReviewSerializer(ModelSerializer):
+    """What the instructor needs to review a submitted project (#67): the project, who sponsors
+    it, and which semesters it is on. Read-only."""
+    status = CharField(source='get_status_display', read_only=True)
+    sponsor = SerializerMethodField()
+    semesters = SerializerMethodField()
+
+    class Meta:
+        model = Project
+        fields = ['id', 'name', 'description', 'website', 'status', 'sponsor', 'semesters', 'created_at']
+        read_only_fields = fields
+
+    def get_sponsor(self, project):
+        sponsor = project.sponsor
+        return {'id': sponsor.id, 'name': sponsor.name(), 'organization': sponsor.organization, 'email': sponsor.email}
+
+    def get_semesters(self, project):
+        return [{'id': semester.id, 'name': str(semester)} for semester in project.semester_set.all()]
+
+
 class AttachmentSerializer(ModelSerializer):
     file = FileField(
         required=False,
