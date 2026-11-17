@@ -1,8 +1,9 @@
 """Propose student-project assignments with OR-Tools CP-SAT (PBI-04, #51).
 
-The admin runs a proposal for a semester, reviews it, and approves it. Nothing is saved
-until approval: the proposal travels to the approve step as a signed token, and only
-approval writes Assignment rows. Model and cost weights: docs/investigations/or-tools-evaluation.md
+The admin runs a proposal for a semester, reviews it, can move students between projects
+(PBI-09, #69), and approves it. Nothing is saved until approval: the proposal travels between
+steps as a signed token, and only approval writes Assignment rows.
+Model and cost weights: docs/investigations/or-tools-evaluation.md
 """
 import time
 from dataclasses import dataclass
@@ -77,6 +78,34 @@ class Proposal:
     seconds: float
     capacity: int
     min_size: int
+    solver_pairs: dict  # {student id: project id} as the solver proposed it, before any moves
+
+    @property
+    def pairs(self):
+        return {student.id: team.project.id for team in self.teams for student, _ in team.members}
+
+    @property
+    def moved(self):
+        """Ids of students the admin moved away from the solver's project."""
+        return {s for s, p in self.pairs.items() if self.solver_pairs.get(s) != p}
+
+    @property
+    def projects(self):
+        """Every project a student can be placed on: those with a team, then those without."""
+        return sorted([team.project for team in self.teams] + self.unused_projects, key=lambda p: p.name)
+
+    @property
+    def violations(self):
+        """Team-size problems that must be fixed before approving."""
+        problems = []
+        for team in self.teams:
+            size = len(team.members)
+            if size > self.capacity:
+                problems.append(f'{team.project.name} has {size} students; the most is {self.capacity}.')
+            elif size < self.min_size:
+                problems.append(f'{team.project.name} has {size} student{"" if size == 1 else "s"}; '
+                                f'the fewest is {self.min_size}.')
+        return problems
 
     @property
     def student_count(self):
@@ -93,17 +122,51 @@ class Proposal:
         return counts
 
     def token(self):
-        pairs = [[student.id, team.project.id] for team in self.teams for student, _ in team.members]
-        return signing.dumps({'semester': self.semester.id, 'pairs': pairs}, salt=TOKEN_SALT)
+        return signing.dumps({
+            'semester': self.semester.id,
+            'pairs': [[s, p] for s, p in self.pairs.items()],
+            'solver': [[s, p] for s, p in self.solver_pairs.items()],
+            'capacity': self.capacity,
+            'min_size': self.min_size,
+            'status': self.status,
+            'seconds': self.seconds,
+        }, salt=TOKEN_SALT)
+
+
+def _load(token):
+    try:
+        return signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
+    except signing.SignatureExpired:
+        raise ProposalError('This proposal is more than an hour old. Run it again.')
+    except signing.BadSignature:
+        raise ProposalError('This proposal could not be verified. Run it again.')
+
+
+def _candidate_projects(semester):
+    return list(
+        semester.projects.exclude(status=Project.StatusChoices.CANCELLED).select_related('sponsor').order_by('name')
+    )
+
+
+def _build(semester, result, prefs, projects, status, seconds, capacity, min_size, solver_pairs):
+    """Turn {student id: project id} into a Proposal with each student's rank of their project."""
+    students = Student.objects.in_bulk(list(result))
+    teams, unused = [], []
+    for project in projects:
+        members = [(students[s], prefs.get(s, {}).get(project.id)) for s, p in result.items() if p == project.id]
+        if members:
+            members.sort(key=lambda m: (m[1] or UNRANKED_COST, m[0].last_name, m[0].first_name))
+            teams.append(Team(project, members))
+        else:
+            unused.append(project)
+    return Proposal(semester, teams, unused, status, seconds, capacity, min_size, solver_pairs)
 
 
 def propose(semester, capacity=DEFAULT_TEAM_SIZE, min_size=None):
     """Solve the semester's assignment. Students are those with preferences for the semester;
     projects are the semester's projects that are not cancelled. Saves nothing."""
     min_size = capacity if min_size is None else min_size
-    projects = list(
-        semester.projects.exclude(status=Project.StatusChoices.CANCELLED).select_related('sponsor').order_by('name')
-    )
+    projects = _candidate_projects(semester)
     prefs = {}
     for student_id, project_id, rank in Preference.objects.filter(semester=semester).values_list(
             'student_id', 'project_id', 'rank'):
@@ -123,17 +186,44 @@ def propose(semester, capacity=DEFAULT_TEAM_SIZE, min_size=None):
     started = time.perf_counter()
     result, status = solve(prefs, [p.id for p in projects], capacity, min_size)
     seconds = time.perf_counter() - started
+    return _build(semester, result, prefs, projects, status, seconds, capacity, min_size, dict(result))
 
-    students = Student.objects.in_bulk(list(prefs))
-    teams, unused = [], []
-    for project in projects:
-        members = [(students[s], prefs[s].get(project.id)) for s, p in result.items() if p == project.id]
-        if members:
-            members.sort(key=lambda m: (m[1] or UNRANKED_COST, m[0].last_name, m[0].first_name))
-            teams.append(Team(project, members))
-        else:
-            unused.append(project)
-    return Proposal(semester, teams, unused, status, seconds, capacity, min_size)
+
+def _apply(data, moves):
+    """The token's pairs with moves ({student id: project id}) applied."""
+    pairs = {s: p for s, p in data['pairs']}
+    unknown = set(moves) - set(pairs)
+    if unknown:
+        raise ProposalError('A moved student is not in this proposal. Run it again.')
+    return {**pairs, **moves}
+
+
+def pending_moves(token, moves):
+    """How many of the posted moves differ from the proposal in the token."""
+    pairs = {s: p for s, p in _load(token)['pairs']}
+    return sum(1 for s, p in moves.items() if pairs.get(s) != p)
+
+
+def edit(token, moves):
+    """Apply the admin's moves to a proposal and re-check it. Saves nothing; the returned
+    Proposal carries a new token, and its violations list any team-size problems."""
+    data = _load(token)
+    semester = Semester.objects.filter(id=data['semester']).first()
+    if semester is None:
+        raise ProposalError('Students or projects changed since this proposal was made. Run it again.')
+    result = _apply(data, moves)
+    if Student.objects.filter(id__in=list(result)).count() != len(result):
+        raise ProposalError('Students or projects changed since this proposal was made. Run it again.')
+    projects = _candidate_projects(semester)
+    if not {p for p in result.values()} <= {p.id for p in projects}:
+        raise ProposalError(f'A student was moved to a project that is not on {semester}.')
+    prefs = {}
+    for student_id, project_id, rank in Preference.objects.filter(
+            semester=semester, student_id__in=list(result)).values_list('student_id', 'project_id', 'rank'):
+        prefs.setdefault(student_id, {})[project_id] = rank
+    solver_pairs = {s: p for s, p in data.get('solver', data['pairs'])}
+    return _build(semester, result, prefs, projects, data.get('status', ''), data.get('seconds'),
+                  data.get('capacity', DEFAULT_TEAM_SIZE), data.get('min_size', DEFAULT_TEAM_SIZE), solver_pairs)
 
 
 def approve(token):
@@ -146,13 +236,7 @@ def approve(token):
 def approve_with_changes(token):
     """Same as approve, and also returns the ids of students whose assignment is new or moved
     to a different project (the ones to notify). Returns (semester, created, updated, changed)."""
-    try:
-        data = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
-    except signing.SignatureExpired:
-        raise ProposalError('This proposal is more than an hour old. Run it again.')
-    except signing.BadSignature:
-        raise ProposalError('This proposal could not be verified. Run it again.')
-
+    data = _load(token)
     semester = Semester.objects.filter(id=data['semester']).first()
     pairs = data['pairs']
     student_ids = {s for s, _ in pairs}
@@ -161,6 +245,11 @@ def approve_with_changes(token):
             or Student.objects.filter(id__in=student_ids).count() != len(student_ids)
             or semester.projects.filter(id__in=project_ids).count() != len(project_ids)):
         raise ProposalError('Students or projects changed since this proposal was made. Run it again.')
+    sizes = {}
+    for _, project_id in pairs:
+        sizes[project_id] = sizes.get(project_id, 0) + 1
+    if any(not data.get('min_size', 1) <= n <= data.get('capacity', n) for n in sizes.values()):
+        raise ProposalError('Some teams are outside the team-size limits. Fix them before approving.')
 
     created = updated = 0
     changed = []
