@@ -15,6 +15,18 @@ The REST API can be interacted with by using ```curl```, the [Django Browsable A
 
 Any authenticated user can read projects. Creating, editing, or deleting a project requires the `sponsor` or `admin` role from the Auth0 token. A sponsor can only act on projects under their own sponsor record (matched by email), cannot submit more than their `projects_allowed` count, and cannot reuse a project name. Admins bypass all three rules. See `project/permissions.py` and `ProjectSerializer` in `project/serializers.py`.
 
+### Reviewing submitted projects
+
+A sponsor's project starts as Pending and on no semester, so students do not see it. Only admins review. A project's `status` is read-only in the project API, so sponsors and students cannot change it by editing.
+
+| Action | Request | Route |
+| - | - | - |
+| List projects waiting for review | GET | ```/api/v1/projects/pending/``` |
+| Approve | POST | ```/api/v1/projects/<id>/approve/``` with optional `{"semester": <id>}`; the current semester by default |
+| Reject | POST | ```/api/v1/projects/<id>/reject/``` |
+
+Approving adds the project to the semester, which puts it in the students' project list. Rejecting marks it Cancelled and removes it from every semester; it is then visible only to admins and its own sponsor, and it cannot be rejected once students are assigned to it. The same two actions are in Django admin under Projects ("Approve for a semester", "Reject"), with a "Waiting for review" filter. Logic: `project/review.py`.
+
 ## Admin Panel - Email Actions
 
 The Django admin panel provides email functionality for sponsors. Access it at `/admin/`.
@@ -75,6 +87,10 @@ The backend test suite uses `pytest` with `pytest-django` and is organized by ap
 - **View tests** (`project/tests/test_views.py`)
     - CRUD and list/detail flows for projects, preferences, assignments, and feedback
     - Query/filter and error-path behavior
+- **Project review tests** (`project/tests/test_review.py`)
+    - Service: pending list, approve into the current or a chosen semester, reject, restoring a rejected project, refusing to reject a project with students assigned
+    - API: pending list for admins, approve makes a project appear in the student list, reject hides it (list and detail), 400s for bad input, 403 for sponsors and students, status cannot be changed by editing
+    - Project admin: approve and reject actions, the approve form, the "Waiting for review" filter
 - **Admin action tests** (`project/tests/test_admin.py`)
     - Project admin actions:
         - Change project status

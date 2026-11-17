@@ -40,8 +40,9 @@ class Auth0Authentication(authentication.BaseAuthentication):
         
         try:
             payload = self._validate_token(token)
-        except Exception as e:
-            raise exceptions.AuthenticationFailed(str(e))
+        except Exception:
+            logger.warning('Auth0 authentication failed', exc_info=True)
+            raise exceptions.AuthenticationFailed('Invalid authentication token')
         
         # Try to get email from custom claim first (access token)
         email = payload.get('https://backend-api-capstone/email')
@@ -77,21 +78,19 @@ class Auth0Authentication(authentication.BaseAuthentication):
             logger.error(f'Failed to get token header: {e}')
             raise Exception('Invalid token header')
         
-        # Get algorithm from token header, default to RS256
-        token_alg = unverified_header.get('alg', 'RS256')
+        # Never trust the algorithm supplied by an untrusted JWT header.
+        if unverified_header.get('alg') != 'RS256':
+            raise exceptions.AuthenticationFailed('Invalid authentication token')
         
         rsa_key = {}
         token_kid = unverified_header.get('kid')
         
-        # If token has no kid, try to use the first key from JWKS
-        if not token_kid and jwks.get('keys'):
-            key = jwks['keys'][0]
-            rsa_key = jwk.construct(key)
-        else:
-            for key in jwks.get('keys', []):
-                if key.get('kid') == token_kid:
-                    rsa_key = jwk.construct(key)
-                    break
+        if not token_kid:
+            raise exceptions.AuthenticationFailed('Invalid authentication token')
+        for key in jwks.get('keys', []):
+            if key.get('kid') == token_kid and key.get('kty') == 'RSA':
+                rsa_key = jwk.construct(key)
+                break
         
         if not rsa_key:
             jwks_kids = [key.get('kid') for key in jwks.get('keys', [])]
@@ -101,7 +100,7 @@ class Auth0Authentication(authentication.BaseAuthentication):
             payload = jwt.decode(
                 token,
                 rsa_key,
-                algorithms=[token_alg],
+                algorithms=['RS256'],
                 audience=AUTH0_AUDIENCE,
                 issuer=f'https://{AUTH0_DOMAIN}/',
             )

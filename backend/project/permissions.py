@@ -4,6 +4,8 @@ Admin and sponsor roles come from the Auth0 token (see ``user.authentication.Use
 A student is whoever is on the roster: their token email matches a Student row.
 
 - Projects: any authenticated user reads; admins, or sponsors on their own projects, write.
+  Rejected (Cancelled) projects are visible only to admins and the owning sponsor, and only
+  admins approve or reject (#67).
 - Preferences: a student reads and writes only their own; admins see all.
 - Assignments: admins see all; a student sees their own and their teammates'; a sponsor
   sees those on their projects. Only admins write.
