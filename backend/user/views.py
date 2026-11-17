@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
 from rest_framework.permissions import IsAuthenticated
+from project.permissions import AdminWriteOrReadOnly
 from rest_framework.response import Response
 from .models import Sponsor
 from .serializers import SponsorSerializer
@@ -16,7 +17,7 @@ class SponsorViewSet(viewsets.ModelViewSet):
     serializer_class = SponsorSerializer
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
 
     @action(detail=True, methods=['get'])
     def projects(self, request, pk=None):
@@ -38,7 +39,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     serializer_class = StudentSerializer
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
 
 
 @api_view(['GET', 'POST', 'PUT'])
