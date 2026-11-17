@@ -61,6 +61,12 @@ class Project(models.Model):
     website = models.URLField(blank=True, null=True)
     """[Optional] A URL field for the project's website"""
 
+    max_team_size = models.PositiveSmallIntegerField(
+        blank=True, null=True, validators=[MinValueValidator(1)],
+        help_text="Most students this project can take. Leave blank to use the semester's team size.",
+    )
+    """[Optional] Overrides the semester's team size for this project when proposing assignments (#68)"""
+
     created_at = models.DateTimeField(auto_now_add=True)
     """[Default] Tracks when the record was created"""
 
@@ -192,6 +198,18 @@ class Semester(models.Model):
     projects = models.ManyToManyField(Project)
     """[Optional] The projects that will be assigned during the semester"""
 
+    team_size = models.PositiveSmallIntegerField(
+        default=4, validators=[MinValueValidator(1)],
+        help_text='Most students on one project. A project can set its own maximum.',
+    )
+    """[Default] The largest team the proposed assignment may form (#68)"""
+
+    min_team_size = models.PositiveSmallIntegerField(
+        default=4, validators=[MinValueValidator(1)], verbose_name='minimum team size',
+        help_text='Fewest students on a project that gets a team. Lower it if students do not divide evenly.',
+    )
+    """[Default] The smallest team the proposed assignment may form (#68)"""
+
     reminder_sent_at = models.DateTimeField(null=True, blank=True, editable=False)
     """[Default] When the deadline reminder emails went out; empty until they are sent"""
 
@@ -208,6 +226,11 @@ class Semester(models.Model):
 
     def __str__(self):
         return f'{self.semester} {self.year}'
+
+    def clean(self):
+        super().clean()
+        if self.team_size and self.min_team_size and self.min_team_size > self.team_size:
+            raise ValidationError({'min_team_size': 'Minimum team size cannot be larger than the team size.'})
 
     # TODO Add an overload of this method to return a Semester instance rather than the enumerable?
     def get_semester_by_date(date):

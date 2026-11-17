@@ -118,6 +118,103 @@ class TestPropose:
             propose(semester, capacity=2)
 
 
+class TestSolveMixedCapacities:
+    def test_a_project_with_its_own_maximum_takes_fewer_students(self):
+        # Everyone wants a first; it only takes 2, so the other three go to b.
+        prefs = {s: {'a': 1, 'b': 2} for s in range(5)}
+        result, status = solve(prefs, ['a', 'b'], capacity=3, min_size=2, overrides={'a': 2})
+        assert status == 'OPTIMAL'
+        assert sorted(result.values()) == ['a', 'a', 'b', 'b', 'b']
+
+    def test_a_maximum_below_the_minimum_becomes_that_projects_team_size(self):
+        # Teams are exactly 3, but a is capped at 1: a gets one student, b gets three.
+        prefs = {s: {'a': 1, 'b': 2} for s in range(4)}
+        result, _ = solve(prefs, ['a', 'b'], capacity=3, overrides={'a': 1})
+        assert sorted(result.values()) == ['a', 'b', 'b', 'b']
+
+    def test_a_larger_maximum_lets_one_project_take_more(self):
+        prefs = {s: {'a': 1} for s in range(5)}
+        result, _ = solve(prefs, ['a', 'b'], capacity=2, min_size=1, overrides={'a': 5})
+        assert list(result.values()) == ['a'] * 5
+
+    def test_infeasible_mixed_capacities_explain_themselves(self):
+        # 5 students; a takes exactly 2, b takes exactly 4. No split of 5 works.
+        prefs = {s: {'a': 1, 'b': 2} for s in range(5)}
+        with pytest.raises(ProposalError, match='some projects have their own maximum'):
+            solve(prefs, ['a', 'b'], capacity=4, overrides={'a': 2})
+
+
+@pytest.mark.django_db
+class TestTeamSizeSettings:
+    @pytest.fixture
+    def cohort(self, semester, sponsor):
+        """Five students who all rank Alpha first and Beta second."""
+        alpha, beta = make_projects(semester, sponsor, ['Alpha', 'Beta'])
+        for s in make_students(5):
+            rank(s, alpha, beta)
+        return semester, alpha, beta
+
+    def test_semester_defaults_are_four(self, semester):
+        assert (semester.team_size, semester.min_team_size) == (4, 4)
+
+    def test_semester_rejects_a_minimum_above_the_team_size(self, semester):
+        from django.core.exceptions import ValidationError
+        semester.team_size, semester.min_team_size = 3, 4
+        with pytest.raises(ValidationError, match='Minimum team size cannot be larger'):
+            semester.full_clean()
+
+    def test_propose_reads_the_semesters_sizes(self, cohort):
+        semester, alpha, beta = cohort
+        Semester.objects.filter(pk=semester.pk).update(team_size=3, min_team_size=2)
+        semester.refresh_from_db()
+
+        proposal = propose(semester)
+
+        assert (proposal.capacity, proposal.min_size) == (3, 2)
+        assert {team.project.name: len(team.members) for team in proposal.teams} == {'Alpha': 3, 'Beta': 2}
+
+    def test_a_project_can_override_the_maximum(self, cohort):
+        semester, alpha, beta = cohort
+        Semester.objects.filter(pk=semester.pk).update(team_size=3, min_team_size=2)
+        Project.objects.filter(pk=alpha.pk).update(max_team_size=2)
+        semester.refresh_from_db()
+
+        proposal = propose(semester)
+
+        assert {team.project.name: len(team.members) for team in proposal.teams} == {'Alpha': 2, 'Beta': 3}
+        assert proposal.overrides == {alpha.id: 2}
+        assert [(team.fewest, team.most) for team in proposal.teams] == [(2, 2), (2, 3)]
+
+    def test_infeasible_settings_raise_a_clear_message(self, cohort):
+        semester, *_ = cohort
+        # Default sizes: teams of exactly 4, and 5 students do not divide.
+        with pytest.raises(ProposalError, match='No assignment puts 5 students into teams of 4'):
+            propose(semester)
+
+    def test_seats_count_each_projects_own_maximum(self, cohort):
+        semester, alpha, beta = cohort
+        Semester.objects.filter(pk=semester.pk).update(team_size=3, min_team_size=1)
+        Project.objects.filter(pk=alpha.pk).update(max_team_size=1)
+        semester.refresh_from_db()
+        with pytest.raises(ProposalError, match='5 students but only 4 seats on 2 projects'):
+            propose(semester)
+
+    def test_moves_and_approval_respect_a_projects_own_maximum(self, cohort):
+        semester, alpha, beta = cohort
+        Semester.objects.filter(pk=semester.pk).update(team_size=3, min_team_size=2)
+        Project.objects.filter(pk=alpha.pk).update(max_team_size=2)
+        semester.refresh_from_db()
+        proposal = propose(semester)
+        mover = proposal.teams[1].members[0][0]  # a Beta student
+
+        edited = edit(proposal.token(), {mover.id: alpha.id})
+
+        assert edited.violations == ['Alpha has 3 students; the most is 2.']
+        with pytest.raises(ProposalError, match='outside the team-size limits'):
+            approve(edited.token())
+        assert Assignment.objects.count() == 0
+
+
 @pytest.mark.django_db
 class TestApprove:
     @pytest.fixture
@@ -260,12 +357,12 @@ class TestSemesterAdminFlow:
         return semester
 
     def run_action(self, client, *semesters, team_size=2, min_size=2):
+        # Team sizes are read from the semester (#68), so set them there before proposing.
+        Semester.objects.filter(pk__in=[s.pk for s in semesters]).update(team_size=team_size, min_team_size=min_size)
         return client.post(reverse('admin:project_semester_changelist'), {
             'action': 'propose_assignments',
             'index': 0,
             '_selected_action': [s.id for s in semesters],
-            'team_size': team_size,
-            'min_size': min_size,
         })
 
     def test_propose_shows_the_table_and_saves_nothing(self, admin_client, cohort):
@@ -283,7 +380,7 @@ class TestSemesterAdminFlow:
         response = self.run_action(admin_client, cohort, team_size=1, min_size=1)
         assert response.status_code == 302
         messages = [str(m) for m in response.wsgi_request._messages]
-        assert messages == ['4 students but only 2 seats (2 projects of 1). Raise the team size or add projects to the semester.']
+        assert messages == ['4 students but only 2 seats on 2 projects. Raise the team size or add projects to the semester.']
         assert Assignment.objects.count() == 0
 
     def test_propose_needs_exactly_one_semester(self, admin_client, cohort):
@@ -387,3 +484,21 @@ class TestSemesterAdminFlow:
         assert response.context['proposal'].moved == {mover.id}
         assert Assignment.objects.count() == 0
         assert any('since the last check' in str(m) for m in response.wsgi_request._messages)
+
+    def test_infeasible_semester_settings_show_a_message_not_an_error(self, admin_client, cohort):
+        # 4 students cannot make teams of exactly 3.
+        response = self.run_action(admin_client, cohort, team_size=3, min_size=3)
+
+        assert response.status_code == 302
+        messages = [str(m) for m in response.wsgi_request._messages]
+        assert messages == ['No assignment puts 4 students into teams of 3. '
+                            'Lower the minimum team size or change the team size.']
+
+    def test_proposal_page_marks_a_project_with_its_own_maximum(self, admin_client, cohort):
+        Project.objects.filter(name='Alpha').update(max_team_size=1)
+
+        response = self.run_action(admin_client, cohort, team_size=3, min_size=1)
+
+        content = response.content.decode()
+        assert 'up to 1 student' in content
+        assert 'projects with their own maximum are marked' in content

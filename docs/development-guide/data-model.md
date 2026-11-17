@@ -50,12 +50,15 @@ erDiagram
         text sponsor_availability
         string status "PNDG IP CMPL CNCL"
         string website
+        int max_team_size "optional; overrides the semester team size"
     }
     Semester {
         int id PK
         string semester "Fall Spring Summer"
         int year
         datetime assignment_date "ranking deadline"
+        int team_size "default 4"
+        int min_team_size "default 4"
     }
     Preference {
         string id PK "student-project slug"
@@ -95,7 +98,7 @@ From [docs/investigations/v1-reference.md](../investigations/v1-reference.md):
 
 - No user record and no role column. Identity comes only from the Auth0 token; a student and a sponsor are rows in two unrelated tables keyed by a non-unique email.
 - `Project.status` is set by hand and never derived from whether the project was assigned.
-- No team concept and no per-project capacity. "Team" is implicitly every student assigned to the same project.
+- No team concept. "Team" is implicitly every student assigned to the same project. (Team size limits were added in #68: `Semester.team_size`, `Semester.min_team_size`, and the optional `Project.max_team_size`.)
 - `Preference` has no database uniqueness on (student, project, semester); it relies on the slug primary key.
 - The ranking deadline (`Semester.assignment_date`) is enforced only in the browser.
 - `Semester.year` maximum is computed at import time.
@@ -106,7 +109,7 @@ From [docs/investigations/v1-reference.md](../investigations/v1-reference.md):
 |---|---|---|
 | Add `AppUser(email unique, role, is_active, created_at)` linked one-to-one to `Student` or `Sponsor` | Server-side role per [ADR-002](../decisions/ADR-002-auth.md) | new table |
 | Make `Sponsor.email` and `Student.email` unique | One account per person | constraint |
-| Add `Project.capacity` (int, default 4) | Team size limit the admin can set | column |
+| ~~Add `Project.capacity` (int, default 4)~~ Done in #68 as `Semester.team_size` and `min_team_size` (default 4) with an optional `Project.max_team_size` override | Team size limit the admin can set | columns |
 | Add `Team` (project, semester) with `Assignment.team` FK, or derive team = assignments grouped by project and semester | Depends on the sponsor's answer on team-preference input; decide after the sponsor meeting | pending |
 | Unique constraint on `Preference(student, project, semester)` | Prevent duplicates at the database, not the client | constraint |
 | Server-side check: reject preference writes after `Semester.assignment_date` | Deadline correctness | view |

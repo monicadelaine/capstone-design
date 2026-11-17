@@ -26,11 +26,11 @@
 
 {% block content %}
 <div class="proposal">
-    <p class="proposal-note">This is a proposal. Nothing has been saved. Move students with "Move to" if needed, then approve it to create the assignments.</p>
+    <p class="proposal-note">This is a proposal. Nothing has been saved. Move students with "Move to" if needed, then approve it to create the assignments. Team sizes are set on the semester; a project can set its own maximum.</p>
 
     <ul class="proposal-summary">
         <li><strong>{{ proposal.student_count }}</strong> students on <strong>{{ proposal.teams|length }}</strong> projects
-            (teams of {% if proposal.min_size == proposal.capacity %}{{ proposal.capacity }}{% else %}{{ proposal.min_size }} to {{ proposal.capacity }}{% endif %})</li>
+            (teams of {% if proposal.min_size == proposal.capacity %}{{ proposal.capacity }}{% else %}{{ proposal.min_size }} to {{ proposal.capacity }}{% endif %}{% if proposal.overrides %}; projects with their own maximum are marked{% endif %})</li>
         {% with counts=proposal.rank_counts %}
         <li>First choice: {{ counts.first }} &middot; Second: {{ counts.second }} &middot; Third: {{ counts.third }}
             &middot; <span{% if counts.unranked %} class="rank-none"{% endif %}>Not ranked: {{ counts.unranked }}</span></li>
@@ -61,7 +61,7 @@
             {% for student, rank in team.members %}
             <tr{% if student.id in proposal.moved %} class="moved"{% endif %}>
                 {% if forloop.first %}
-                <td rowspan="{{ team.members|length }}"><strong>{{ team.project.name }}</strong></td>
+                <td rowspan="{{ team.members|length }}"><strong>{{ team.project.name }}</strong>{% if team.most != proposal.capacity %}<br><span class="proposal-note">up to {{ team.most }} student{{ team.most|pluralize }}</span>{% endif %}</td>
                 <td rowspan="{{ team.members|length }}">{{ team.project.sponsor }}</td>
                 {% endif %}
                 <td class="student-cell">{{ student }}{% if student.id in proposal.moved %} <span class="moved-tag">(moved)</span>{% endif %}</td>

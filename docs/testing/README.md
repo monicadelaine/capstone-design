@@ -6,7 +6,7 @@ Two automated suites exist, and both run inside the dev containers. Counts are a
 
 | Suite | Runner | Where the tests live | Tests |
 |---|---|---|---|
-| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 330 |
+| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 346 |
 | Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 56 |
 
 ## Run everything with one command
