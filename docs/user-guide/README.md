@@ -246,7 +246,7 @@ Your dashboard lists each of your projects as a card.
 
 ![The sponsor dashboard with a project card and its assigned students](../images/sponsor-dashboard.png)
 
-*Figure 7: The sponsor dashboard. Each card shows a project, its attachments, and the students assigned to it.*
+*Figure 7: The sponsor dashboard. Each card shows a project and its status; click **View details** to open it. Once teams are posted, each card also lists the students assigned to the project.*
 
 Each card shows the project name and a short description. Click **View details** to see more, including the files and links attached to the project. Under **Assigned students** you will see:
 
