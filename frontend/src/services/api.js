@@ -90,6 +90,12 @@ class ApiService {
     return map;
   }
 
+  // The assignments this user may see, each with its student's name and email (student_detail).
+  async getAssignments(params = {}) {
+    const response = await this.client.get('/assignments/', { params });
+    return response.data;
+  }
+
   async getAttachments(projectId) {
     const response = await this.client.get('/attachments/', { params: { project: projectId } });
     return response.data;

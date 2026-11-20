@@ -4,6 +4,7 @@ from rest_framework.serializers import FileField, ModelSerializer, CharField, Li
 from rest_framework.validators import UniqueTogetherValidator
 from .models import Attachment, Semester, Preference, Project, Assignment, Feedback, ALLOWED_ATTACHMENT_FILE_EXTENSIONS, validate_attachment_file_size
 from .permissions import ROLE_SPONSOR, is_admin, sponsor_for_user, user_has_role
+from user.models import Student
 import logging
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,21 @@ class PreferenceSerializer(ModelSerializer):
         list_serializer_class = PreferenceListSerializer
 
 
+class AssignedStudentSerializer(ModelSerializer):
+    """The student details an assignment shows: enough to name and contact someone on a team (#70, #71).
+    CWID, class and major are left out."""
+
+    class Meta:
+        model = Student
+        fields = ['id', 'first_name', 'last_name', 'email']
+        read_only_fields = fields
+
+
 class AssignmentSerializer(ModelSerializer):
+    # `student` stays the id. This adds who it is, for the people AssignmentViewSet lets see the team:
+    # the student's teammates, the project's sponsor and admins.
+    student_detail = AssignedStudentSerializer(source='student', read_only=True)
+
     class Meta:
         model = Assignment
         fields = '__all__'

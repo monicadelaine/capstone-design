@@ -1,6 +1,7 @@
 <script setup>
 import SponsorProjectCard from './SponsorProjectCard.vue';
 import apiService from '../services/api';
+import { studentsByProject } from '../services/teams';
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth0 } from '@auth0/auth0-vue';
@@ -11,6 +12,8 @@ const router = useRouter();
 
 const currentSponsorId = ref(null);
 const projects = ref([]);
+// { projectId: [students] } once loaded, or null if it could not be loaded (#71)
+const studentsForProject = ref(null);
 const loading = ref(true);
 const error = ref(null);
 const flash = ref(null);
@@ -38,6 +41,16 @@ onMounted(async () => {
 
         const sponsorProjects = await apiService.getProjectsBySponsor(currentSponsorId.value);
         projects.value = Array.isArray(sponsorProjects) ? sponsorProjects : [];
+
+        // The students assigned to these projects this semester. The API only sends this sponsor's own.
+        try {
+            const semester = await apiService.getCurrentSemester();
+            const assignments = await apiService.getAssignments(semester?.id ? { semester: semester.id } : {});
+            studentsForProject.value = studentsByProject(assignments);
+        } catch (teamErr) {
+            console.error('Failed to fetch assigned students:', teamErr);
+            studentsForProject.value = null;
+        }
     } catch (err) {
         console.error('Failed to fetch sponsor projects:', err);
         error.value = err;
@@ -62,7 +75,10 @@ onMounted(async () => {
 
         <div v-else-if="projects.length" class="cards-list">
             <div v-for="project in projects" :key="project.id" class="card-item">
-                <SponsorProjectCard :project="project" />
+                <SponsorProjectCard
+                    :project="project"
+                    :students="studentsForProject ? (studentsForProject[project.id] || []) : null"
+                />
             </div>
     </div>
         <div v-else class="card empty">

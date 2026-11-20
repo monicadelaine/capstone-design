@@ -291,8 +291,9 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         """Admins see all. A student sees their own assignment and their teammates' (the
         assignment card lists teammates). A sponsor sees assignments on their projects."""
         user = self.request.user
+        assignments = Assignment.objects.select_related('student')
         if is_admin(user):
-            return Assignment.objects.all()
+            return assignments
         visible = Q(pk__in=[])
         student = student_for_user(user)
         if student:
@@ -301,7 +302,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
         sponsor = sponsor_for_user(user)
         if sponsor:
             visible |= Q(project__sponsor=sponsor)
-        return Assignment.objects.filter(visible)
+        return assignments.filter(visible)
 
 
 class FeedbackViewSet(viewsets.ModelViewSet):

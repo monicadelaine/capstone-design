@@ -31,6 +31,9 @@ This guide explains, step by step, how to use the site. It is written for people
 - Then jump to the section for your role. Every role section begins with **what you can and cannot do**.
 - If something goes wrong, see [FAQ and Troubleshooting](#faq-and-troubleshooting).
 
+Only students who submitted preferences for the semester are included.
+
+**Approving publishes the assignments.** While you are only proposing or moving students, nothing is saved and nobody else can see it. The moment you approve, each assigned student can see their project, the sponsor's contact details and their teammates' names and emails, and each sponsor sees the students on their own projects, with their names and emails. Nobody sees another team. Assigning a student by hand from the Preferences list, without a proposal, shows them the same way right away.
 > [!NOTE]
 > A separate, more technical FAQ for developers and for whoever hosts the site is in [`docs/faq/`](../faq/). This guide does not cover installing or hosting the site.
 
