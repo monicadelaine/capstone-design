@@ -1,11 +1,13 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
 from rest_framework.permissions import IsAuthenticated
+from project.permissions import AdminWriteOrReadOnly
 from rest_framework.response import Response
 from .models import Sponsor
 from .serializers import SponsorSerializer
 from .models import Student
 from project.models import Project, Semester
+from project.permissions import hide_rejected_projects
 from project.serializers import ProjectSerializer
 from .serializers import StudentSerializer
 from .authentication import Auth0Authentication
@@ -16,7 +18,7 @@ class SponsorViewSet(viewsets.ModelViewSet):
     serializer_class = SponsorSerializer
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
 
     @action(detail=True, methods=['get'])
     def projects(self, request, pk=None):
@@ -28,6 +30,8 @@ class SponsorViewSet(viewsets.ModelViewSet):
             projects = Semester.objects.filter(id=qpid).first().projects.filter(sponsor_id=pk)
         else:
             projects = Project.objects.filter(sponsor_id=pk)
+        # A rejected project stays visible only to admins and its own sponsor (#67).
+        projects = hide_rejected_projects(projects, request.user)
 
         serializer = ProjectSerializer(projects, many=True)
         return Response(serializer.data)
@@ -38,7 +42,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     serializer_class = StudentSerializer
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
 
 
 @api_view(['GET', 'POST', 'PUT'])

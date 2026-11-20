@@ -18,6 +18,7 @@ from .models import Assignment, Attachment, Feedback, Preference, Project, Semes
 from .permissions import (
     AdminWriteOrReadOnly,
     IsAdminRole,
+    hide_rejected_projects,
     ProjectWritePermission,
     is_admin,
     owns_student_id,
@@ -51,14 +52,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Rejected projects are hidden from everyone except admins and the owning sponsor (#67)."""
-        queryset = Project.objects.all()
-        if is_admin(self.request.user):
-            return queryset
-        rejected = Q(status=Project.StatusChoices.CANCELLED)
-        sponsor = sponsor_for_user(self.request.user)
-        if sponsor is not None:
-            rejected &= ~Q(sponsor=sponsor)
-        return queryset.exclude(rejected)
+        return hide_rejected_projects(Project.objects.all(), self.request.user)
 
     # TODO Add error handling if a semester DNE for the current date
     def list(self, request, *args, **kwargs):
@@ -112,6 +106,10 @@ class AttachmentViewSet(viewsets.ModelViewSet):
 
     authentication_classes = [Auth0Authentication]
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """A rejected project's files are hidden like the project itself (#67)."""
+        return hide_rejected_projects(Attachment.objects.all(), self.request.user, 'project__')
 
 
 class AttachmentDownloadAPIView(APIView):

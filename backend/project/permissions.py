@@ -11,6 +11,7 @@ A student is whoever is on the roster: their token email matches a Student row.
   sees those on their projects. Only admins write.
 - Semesters: any authenticated user reads; only admins write.
 """
+from django.db.models import Q
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from user.models import Sponsor, Student
@@ -57,6 +58,19 @@ class ProjectWritePermission(BasePermission):
             return True
         sponsor = sponsor_for_user(request.user)
         return sponsor is not None and obj.sponsor_id == sponsor.id
+
+
+def hide_rejected_projects(queryset, user, project_path=''):
+    """Drop rows whose project was rejected (Cancelled), unless the user is an admin or the
+    project's own sponsor (#67). project_path is how the queryset reaches the project, for
+    example 'project__' for attachments; empty for a Project queryset."""
+    if is_admin(user):
+        return queryset
+    rejected = Q(**{f'{project_path}status': 'CNCL'})
+    sponsor = sponsor_for_user(user)
+    if sponsor is not None:
+        rejected &= ~Q(**{f'{project_path}sponsor': sponsor})
+    return queryset.exclude(rejected)
 
 
 def student_for_user(user):

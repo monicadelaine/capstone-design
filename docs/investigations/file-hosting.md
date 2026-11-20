@@ -2,8 +2,8 @@
 
 **Date:** 2026-11-09 · **Author:** Jayden White · **Related:** #72 (PBI-12), #57 (SECURITY-02), stand-up #91
 **Question:** Where should sponsor-uploaded project files (pdf, docx, pptx, png, jpg, zip, up to 25 MB) live, and how should students download them, given a single GCP VM running Docker Compose and a Django backend?
-**Answer (draft):** Use Google Cloud Storage in production, because the settings and the GCP project already point at it, and keep downloads behind a Django permission check that hands out short-lived signed URLs. Four things in the code had to change first. Three are now fixed on `feature/file-submission-support`: the model hard-wired an S3 backend (`5abde52`), nginx rejected uploads over 1 MB (`client_max_body_size 30m`, `d298d13`), and a second upload with the same filename overwrote the first (random stored names, `0704251`). Downloads are also now always attachments with a safely built filename header (`bfe375d`). One remains: any logged-in user can read or delete any attachment (#57). MinIO should not be used beyond local development.
-**Status:** draft, updated 2026-11-11 for the model, nginx, file-name and download-header fixes. Marked **TODO** where a fact could not be checked from the repository (the production environment is not in the repo). Figures marked *verify* come from third-party pages, not the provider.
+**Answer:** Use Google Cloud Storage in production, because the settings and the GCP project already point at it, and keep downloads behind a Django permission check that hands out short-lived signed URLs. Four things in the code had to change first. Three are now fixed on `feature/file-submission-support`: the model hard-wired an S3 backend (`5abde52`), nginx rejected uploads over 1 MB (`client_max_body_size 30m`, `d298d13`), and a second upload with the same filename overwrote the first (random stored names, `0704251`). Downloads are also now always attachments with a safely built filename header (`bfe375d`). One remains: any logged-in user can read or delete any attachment (#57). MinIO should not be used beyond local development.
+**Status:**, updated 2026-11-11 for the model, nginx, file-name and download-header fixes. Marked **TODO** where a fact could not be checked from the repository (the production environment is not in the repo). Figures marked *verify* come from third-party pages, not the provider.
 
 ## What exists today
 
@@ -61,7 +61,7 @@ Uploads can stay on the current path (browser to Django to bucket): at 25 MB it 
 
 Assumption, to confirm with the sponsor: about 40 projects per semester, up to 3 files each, typically 5 MB and never above 25 MB. That is roughly 600 MB typical and 3 GB worst case per semester, with downloads by a few dozen students. Typical use (about 600 MB per semester, kept forever) would take roughly eight semesters to reach B's 5 GB free storage, and D and E have 10 GB; the worst case (3 GB per semester) reaches B's limit in under two. Beyond the free tier, storage at these sizes costs a few cents per month at standard rates (*verify*).
 
-## Recommendation (draft)
+## Recommendation
 
 1. **Production: Google Cloud Storage with signed URLs** (`GS_IAM_SIGN_BLOB`, dedicated service account, bucket in a free US region, short expiry).
 2. **Fix the model**: **done** in `5abde52` (explicit storage removed, `STORAGES` declared per environment, migration 0023, tests).
@@ -87,4 +87,4 @@ Assumption, to confirm with the sponsor: about 40 projects per semester, up to 3
 - OWASP File Upload Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
 - Caddy `request_body` directive (a limit applies only when `max_size` is set): https://caddyserver.com/docs/caddyfile/directives/request_body
 
-Drafted with Claude Code (first draft), Fact-checking, research, and formatting done my me.
+Drafted with Claude Code. Revisions, Fact-checking, research, and formatting done my me.

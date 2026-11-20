@@ -218,6 +218,44 @@ class TestTeamSizeSettings:
 
 
 @pytest.mark.django_db
+class TestTeamSizeReviewFollowUps:
+    """Follow-ups from the #97 review."""
+
+    def test_api_rejects_a_minimum_above_the_team_size(self, semester):
+        from project.tests.test_views import make_client
+        client = make_client('admin@example.com', ['admin'])
+        url = reverse('project:semester-detail', args=[semester.id])
+
+        response = client.patch(url, {'team_size': 2, 'min_team_size': 4}, format='json')
+
+        assert response.status_code == 400
+        assert 'Minimum team size cannot be larger' in str(response.data['min_team_size'])
+        semester.refresh_from_db()
+        assert (semester.team_size, semester.min_team_size) == (4, 4)
+
+    def test_api_checks_against_the_saved_team_size(self, semester):
+        from project.tests.test_views import make_client
+        client = make_client('admin@example.com', ['admin'])
+
+        response = client.patch(reverse('project:semester-detail', args=[semester.id]), {'min_team_size': 5}, format='json')
+
+        assert response.status_code == 400
+
+    def test_a_zero_maximum_written_outside_the_forms_means_no_team(self, semester, sponsor):
+        alpha, beta = make_projects(semester, sponsor, ['Alpha', 'Beta'])
+        for s in make_students(2):
+            rank(s, alpha, beta)
+        Semester.objects.filter(pk=semester.pk).update(team_size=2, min_team_size=1)
+        Project.objects.filter(pk=alpha.pk).update(max_team_size=0)  # bypasses the form validator
+        semester.refresh_from_db()
+
+        proposal = propose(semester)
+
+        assert [team.project.name for team in proposal.teams] == ['Beta']
+        assert proposal.overrides == {alpha.id: 0}
+
+
+@pytest.mark.django_db
 class TestApprove:
     @pytest.fixture
     def proposal(self, semester, sponsor):
@@ -420,6 +458,38 @@ class TestSemesterAdminFlow:
         assert Assignment.objects.filter(semester=cohort).count() == 4
         assert mail.outbox == []
         assert any(str(m).startswith('Students were not emailed') for m in response.wsgi_request._messages)
+
+    def test_edit_requires_assignment_permissions(self, client, cohort):
+        token = propose(cohort, capacity=2).token()
+        staff = User.objects.create_user('staff', password='pw', is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(codename='view_semester'))
+        client.force_login(staff)
+
+        response = client.post(reverse('admin:project_semester_edit_assignments'), {'token': token})
+
+        assert response.status_code == 403
+
+    def test_edit_is_open_to_staff_who_may_approve(self, client, cohort):
+        token = propose(cohort, capacity=2).token()
+        staff = User.objects.create_user('staff', password='pw', is_staff=True)
+        staff.user_permissions.add(*Permission.objects.filter(codename__in=['add_assignment', 'change_assignment']))
+        client.force_login(staff)
+
+        response = client.post(reverse('admin:project_semester_edit_assignments'), {'token': token})
+
+        assert response.status_code == 200
+        assert response.context['proposal'].semester == cohort
+
+    def test_propose_action_is_hidden_from_staff_who_cannot_assign(self, client, cohort):
+        staff = User.objects.create_user('staff', password='pw', is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(codename='view_semester'))
+        client.force_login(staff)
+
+        response = client.get(reverse('admin:project_semester_changelist'))
+
+        assert response.status_code == 200
+        action_form = response.context['action_form']  # None when no action is allowed
+        assert action_form is None or 'propose_assignments' not in str(action_form.fields['action'].choices)
 
     def test_approve_requires_assignment_permissions(self, client, cohort):
         token = propose(cohort, capacity=2).token()

@@ -113,21 +113,21 @@ class ProjectAdmin(ImportExportModelAdmin):
         url = reverse('admin:user_sponsor_change', args=[obj.sponsor.id])
         return format_html(f'<a href="{url}">{obj.sponsor}</a>')
 
-    @action_with_form(ChangeProjectStatusActionForm, description='Change status')
+    @action_with_form(ChangeProjectStatusActionForm, permissions=['change'], description='Change status')
     def change_project_status_action(self, request, queryset, data):
         for project in queryset:
             project.status = data['status']
             project.save()
         self.message_user(request, f'Status changed to {data["status"].upper()} for {queryset.count()} projects.')
 
-    @action_with_form(AssignProjectToSemesterActionForm, description='Assign to a semester')
+    @action_with_form(AssignProjectToSemesterActionForm, permissions=['change'], description='Assign to a semester')
     def assign_project_to_semester(self, request, queryset, data):
         for semester in data['semester']:
             semester.projects.add(*queryset)
             semester.save()
         self.message_user(request, f'Assigned {queryset.count()} projects to {len(data["semester"])} semesters.')
 
-    @action_with_form(RemoveProjectFromSemesterActionForm, description='Remove from semester')
+    @action_with_form(RemoveProjectFromSemesterActionForm, permissions=['change'], description='Remove from semester')
     def remove_project_from_semester(self, request, queryset, data):
         semester_id = request.GET.get('semester')
         if semester_id:
@@ -140,13 +140,13 @@ class ProjectAdmin(ImportExportModelAdmin):
             self.message_user(request, 'Filter the projects by a semester first', level='error')
 
     # Instructor review of submitted projects (PBI-07, #67).
-    @action_with_form(ApproveProjectsActionForm, description='Approve for a semester')
+    @action_with_form(ApproveProjectsActionForm, permissions=['change'], description='Approve for a semester')
     def approve_projects(self, request, queryset, data):
         for project in queryset:
             approve_project(project, data['semester'])
         self.message_user(request, f'Approved {queryset.count()} project(s) for {data["semester"]}.')
 
-    @action_with_form(RejectProjectsActionForm, description='Reject')
+    @action_with_form(RejectProjectsActionForm, permissions=['change'], description='Reject')
     def reject_projects(self, request, queryset, data):
         rejected = 0
         for project in queryset:
@@ -295,7 +295,7 @@ class SemesterAdmin(ImportExportModelAdmin):
 
     # Proposed assignments (PBI-04, #51): solve, show the table, save only on approval.
     # Team sizes come from the semester and its projects (PBI-08, #68), not from a form.
-    @admin.action(description='Propose assignments')
+    @admin.action(description='Propose assignments', permissions=['assign'])
     def propose_assignments(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(request, 'Select exactly one semester to propose assignments for.', level='error')
@@ -337,9 +337,19 @@ class SemesterAdmin(ImportExportModelAdmin):
         return custom_urls + super().get_urls()
 
     # Move students between projects before approving (PBI-09, #69). Saves nothing.
+    @staticmethod
+    def can_assign(user):
+        """Who may see, change, and approve a proposal: the same permissions approving needs."""
+        return user.has_perm('project.add_assignment') and user.has_perm('project.change_assignment')
+
+    def has_assign_permission(self, request):
+        return self.can_assign(request.user)
+
     def edit_assignments_view(self, request):
         if request.method != 'POST':
             return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
+        if not self.can_assign(request.user):
+            raise PermissionDenied
         try:
             proposal = edit(request.POST.get('token', ''), self.posted_moves(request.POST))
         except ProposalError as e:
@@ -350,7 +360,7 @@ class SemesterAdmin(ImportExportModelAdmin):
     def approve_assignments_view(self, request):
         if request.method != 'POST':
             return HttpResponseRedirect(reverse('admin:project_semester_changelist'))
-        if not (request.user.has_perm('project.add_assignment') and request.user.has_perm('project.change_assignment')):
+        if not self.can_assign(request.user):
             raise PermissionDenied
         token = request.POST.get('token', '')
         try:

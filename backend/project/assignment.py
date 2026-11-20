@@ -188,7 +188,8 @@ def propose(semester, capacity=None, min_size=None):
         min_size = semester.min_team_size if min_size is None else min_size
     min_size = capacity if min_size is None else min_size
     projects = _candidate_projects(semester)
-    overrides = {p.id: p.max_team_size for p in projects if p.max_team_size}
+    # Blank (None) means the semester's team size. The field's validator keeps saved values at 1 or more.
+    overrides = {p.id: p.max_team_size for p in projects if p.max_team_size is not None}
     prefs = {}
     for student_id, project_id, rank in Preference.objects.filter(semester=semester).values_list(
             'student_id', 'project_id', 'rank'):
