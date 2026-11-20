@@ -110,6 +110,16 @@ class AttachmentSerializer(ModelSerializer):
         if bool(file_obj) == bool(link):
             raise ValidationError('Provide either a file or a link, but not both.')
 
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is not None and not is_admin(user):
+            sponsor = sponsor_for_user(user)
+            project = attrs.get('project', getattr(instance, 'project', None))
+            if not user_has_role(user, ROLE_SPONSOR) or sponsor is None:
+                raise ValidationError({'project': 'Only sponsors may modify attachments.'})
+            if project is None or project.sponsor_id != sponsor.id:
+                raise ValidationError({'project': 'You may only attach files to your own project.'})
+
         return attrs
 
     class Meta:
@@ -197,6 +207,22 @@ class AssignmentSerializer(ModelSerializer):
 
 
 class FeedbackSerializer(ModelSerializer):
+    def validate(self, attrs):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is not None and not is_admin(user):
+            sponsor = sponsor_for_user(user)
+            instance = getattr(self, 'instance', None)
+            feedback_sponsor = attrs.get('sponsor', getattr(instance, 'sponsor', None))
+            project = attrs.get('project', getattr(instance, 'project', None))
+            if not user_has_role(user, ROLE_SPONSOR) or sponsor is None:
+                raise ValidationError('Only sponsors may submit feedback.')
+            if feedback_sponsor is None or feedback_sponsor.id != sponsor.id:
+                raise ValidationError({'sponsor': 'Feedback must use your own sponsor account.'})
+            if project is None or project.sponsor_id != sponsor.id:
+                raise ValidationError({'project': 'Feedback must relate to your own project.'})
+        return attrs
+
     class Meta:
         model = Feedback
         fields = '__all__'

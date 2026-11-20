@@ -109,3 +109,38 @@ class AdminWriteOrReadOnly(BasePermission):
 
     def has_permission(self, request, view):
         return request.method in SAFE_METHODS or is_admin(request.user)
+
+
+class AttachmentWritePermission(BasePermission):
+    """Keep authenticated reads; only admins and owning sponsors may write."""
+
+    message = 'Only the owning sponsor or an administrator may modify attachments.'
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS or is_admin(request.user):
+            return True
+        return user_has_role(request.user, ROLE_SPONSOR) and sponsor_for_user(request.user) is not None
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS or is_admin(request.user):
+            return True
+        sponsor = sponsor_for_user(request.user)
+        return sponsor is not None and obj.project_id is not None and obj.project.sponsor_id == sponsor.id
+
+
+class SponsorFeedbackPermission(BasePermission):
+    """Feedback is private to the owning sponsor; admins can access all."""
+
+    message = 'Only the owning sponsor or an administrator may access feedback.'
+
+    def has_permission(self, request, view):
+        if is_admin(request.user):
+            return True
+        return user_has_role(request.user, ROLE_SPONSOR) and sponsor_for_user(request.user) is not None
+
+    def has_object_permission(self, request, view, obj):
+        if is_admin(request.user):
+            return True
+        sponsor = sponsor_for_user(request.user)
+        return (sponsor is not None and obj.sponsor_id == sponsor.id
+                and obj.project.sponsor_id == sponsor.id)
