@@ -16,7 +16,9 @@ from django_admin_action_forms import AdminActionForm, action_with_form
 from import_export.admin import ImportExportModelAdmin
 
 from emails.notifications import NotificationError, notify_assignments_posted
-from project.assignment import DEFAULT_TEAM_SIZE, ProposalError, approve_with_changes, edit, pending_moves, propose
+from project.assignment import (
+    ProposalError, approve_with_changes, compare, edit, parse_settings, pending_moves, propose,
+)
 from project.models import Project, Semester, Preference, Assignment, Feedback, Attachment
 from project.review import ReviewError, approve_project, current_semester, reject_project
 from project.resources import ProjectResource, SemesterResource, PreferenceResource, AssignmentResource, FeedbackResource, AttachmentResource
@@ -293,21 +295,92 @@ class SemesterAdmin(ImportExportModelAdmin):
     def team_sizes(self, obj):
         return obj.team_size if obj.min_team_size == obj.team_size else f'{obj.min_team_size} to {obj.team_size}'
 
+    # The fairness limit (PBI-17, #107): keep every student at or above this choice where possible.
+    FAIRNESS_CHOICES = [
+        ('', 'No limit: lowest total only'),
+        ('3', 'Nobody on a project they did not rank'),
+        ('2', 'Nobody below their second choice'),
+        ('1', 'Everybody gets a first choice'),
+    ]
+
+    @staticmethod
+    def max_rank_from(value):
+        return int(value) if str(value) in ('1', '2', '3') else None
+
+    class ProposeAssignmentsActionForm(AdminActionForm):
+        fairness = forms.ChoiceField(
+            choices=[], required=False, label='Fairness limit',
+            help_text='If the limit cannot be met for everyone, the proposal keeps as many students within it '
+                      'as possible and says how many are beyond it.',
+        )
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.fields['fairness'].choices = SemesterAdmin.FAIRNESS_CHOICES
+
+        class Meta:
+            help_text = ('Runs the solver with the team sizes set on the semester. '
+                         'Nothing is saved until you approve the proposal.')
+
+    class CompareTeamSizesActionForm(ProposeAssignmentsActionForm):
+        settings = forms.CharField(
+            label='Team sizes to compare',
+            help_text='Two or more, separated by commas. Write 4 for teams of exactly 4, or 3-4 for teams of 3 to 4.',
+        )
+        field_order = ['settings', 'fairness']
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            semester = args[3].first() if len(args) > 3 else None
+            if semester is not None:
+                low, high = semester.min_team_size, semester.team_size
+                current = f'{high}' if low == high else f'{low}-{high}'
+                others = [f'{high - 1}-{high}', f'{high}-{high + 1}'] if low == high and high > 1 else [f'{high}']
+                self.fields['settings'].initial = ', '.join([current, *others])
+
+        def clean_settings(self):
+            try:
+                return parse_settings(self.cleaned_data['settings'])
+            except ProposalError as e:
+                raise forms.ValidationError(str(e))
+
+        class Meta:
+            help_text = ('Runs the solver once per team size and shows the results side by side. '
+                         'Nothing is saved, and the semester\'s own team size is not changed.')
+
     # Proposed assignments (PBI-04, #51): solve, show the table, save only on approval.
     # Team sizes come from the semester and its projects (PBI-08, #68), not from a form.
-    @admin.action(description='Propose assignments', permissions=['assign'])
-    def propose_assignments(self, request, queryset):
+    @action_with_form(ProposeAssignmentsActionForm, permissions=['assign'], description='Propose assignments')
+    def propose_assignments(self, request, queryset, data):
         if queryset.count() != 1:
             self.message_user(request, 'Select exactly one semester to propose assignments for.', level='error')
             return None
         try:
-            proposal = propose(queryset.get())
+            proposal = propose(queryset.get(), max_rank=self.max_rank_from(data.get('fairness')))
         except ProposalError as e:
             self.message_user(request, str(e), level='error')
             return None
         return self.render_proposal(request, proposal)
 
-    actions = [propose_assignments]
+    # Side-by-side comparison of team sizes (PBI-17, #107). Saves nothing.
+    @action_with_form(CompareTeamSizesActionForm, permissions=['assign'], description='Compare team sizes')
+    def compare_team_sizes(self, request, queryset, data):
+        if queryset.count() != 1:
+            self.message_user(request, 'Select exactly one semester to compare team sizes for.', level='error')
+            return None
+        semester = queryset.get()
+        max_rank = self.max_rank_from(data.get('fairness'))
+        return TemplateResponse(request, 'admin/project/semester/team_size_comparison.html', {
+            **self.admin_site.each_context(request),
+            'opts': self.model._meta,
+            'title': f'Team sizes compared for {semester}',
+            'semester': semester,
+            'comparisons': compare(semester, data['settings'], max_rank),
+            'max_rank': max_rank or '',
+            'fairness_label': dict(self.FAIRNESS_CHOICES)[str(max_rank or '')],
+        })
+
+    actions = [propose_assignments, compare_team_sizes]
 
     def render_proposal(self, request, proposal):
         return TemplateResponse(request, 'admin/project/semester/assignment_proposal.html', {
@@ -333,6 +406,8 @@ class SemesterAdmin(ImportExportModelAdmin):
                  name='project_semester_approve_assignments'),
             path('edit-assignments/', self.admin_site.admin_view(self.edit_assignments_view),
                  name='project_semester_edit_assignments'),
+            path('propose-with/', self.admin_site.admin_view(self.propose_with_view),
+                 name='project_semester_propose_with'),
         ]
         return custom_urls + super().get_urls()
 
@@ -344,6 +419,26 @@ class SemesterAdmin(ImportExportModelAdmin):
 
     def has_assign_permission(self, request):
         return self.can_assign(request.user)
+
+    # Open one column of the comparison as a normal proposal (PBI-17, #107). Saves nothing.
+    def propose_with_view(self, request):
+        back = HttpResponseRedirect(reverse('admin:project_semester_changelist'))
+        if request.method != 'POST':
+            return back
+        if not self.can_assign(request.user):
+            raise PermissionDenied
+        post = request.POST
+        semester = Semester.objects.filter(pk=post.get('semester')).first() if post.get('semester', '').isdigit() else None
+        if semester is None or not (post.get('min_size', '').isdigit() and post.get('capacity', '').isdigit()):
+            self.message_user(request, 'That comparison is no longer valid. Run it again.', level='error')
+            return back
+        try:
+            proposal = propose(semester, int(post['capacity']), int(post['min_size']),
+                               self.max_rank_from(post.get('max_rank')))
+        except ProposalError as e:
+            self.message_user(request, str(e), level='error')
+            return back
+        return self.render_proposal(request, proposal)
 
     def edit_assignments_view(self, request):
         if request.method != 'POST':
