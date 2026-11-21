@@ -97,3 +97,28 @@ def test_sponsor_can_update_own_profile_without_record_write_permission(sponsor)
     assert result.status_code == 200
     sponsor.refresh_from_db()
     assert sponsor.organization == 'Acme'
+
+
+@pytest.mark.django_db
+def test_student_token_cannot_add_itself_to_the_roster():
+    """A student is whoever the instructor imported. The profile endpoint must not add one."""
+    client = client_for('outsider@crimson.ua.edu', ['student'])
+    result = client.post(reverse('user:profile'), {
+        'cwid': '87654321', 'first_name': 'Not', 'last_name': 'Enrolled',
+        'email': 'outsider@crimson.ua.edu', 'class_code': 'SR', 'major_code': 'CS',
+    }, format='json')
+    assert result.status_code == status.HTTP_403_FORBIDDEN
+    assert result.data['error'] == 'students_cannot_create'
+    assert not Student.objects.exists()
+
+
+@pytest.mark.django_db
+def test_sponsor_can_still_create_own_profile():
+    client = client_for('new.sponsor@example.com', ['sponsor'])
+    result = client.post(reverse('user:profile'), {
+        'first_name': 'New', 'last_name': 'Sponsor', 'email': 'someone.else@example.com',
+        'organization': 'Org', 'phone_number': '(123) 456-7890',
+    }, format='json')
+    assert result.status_code == status.HTTP_201_CREATED
+    # The email always comes from the token, never from the request body.
+    assert Sponsor.objects.get().email == 'new.sponsor@example.com'
