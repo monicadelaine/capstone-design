@@ -326,7 +326,7 @@ Deployment is covered in the [deployment guide](../deployment-guide/README.md).
 
 These are the things a new developer should know are not finished. Each has an Issue.
 
-- Roles still come from the Auth0 token. Moving them into our database is #77 ([ADR-002](../decisions/ADR-002-auth.md) describes the target).
+- Roles still come from the Auth0 token. Today the post-login Action gives `admin` from an Auth0 role assignment and otherwise decides student or sponsor from the email domain. #77 tightens that: the student role only for a `@crimson.ua.edu` address that is on the roster, admin only from an Auth0 role assignment, and the signup page's role hint removed. Keeping roles in our own database is the longer-term design in [ADR-002](../decisions/ADR-002-auth.md), and is not what #77 asks for.
 - Any logged-in person can read the sponsor and student lists. Writes are admin only.
 - No full-semester end-to-end test exists yet (#80).
 - A project's status does not change when a team is approved (#74).

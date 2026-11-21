@@ -1,0 +1,97 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .comparison table { width: 100%; margin-bottom: 16px; }
+    .comparison th[scope="row"] { font-weight: normal; }
+    .comparison td, .comparison th { vertical-align: top; }
+    .comparison .bad { color: var(--error-fg); font-weight: bold; }
+    .comparison-note { color: var(--body-quiet-color); }
+    .comparison form { margin: 0; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:project_semester_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; Team sizes compared
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="comparison">
+    <p class="comparison-note">Each column is what the solver would propose with that team size. Nothing has been saved, and {{ semester }}'s own team size is unchanged. Fairness limit: {{ fairness_label|lower }}.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Teams of</th>
+                {% for c in comparisons %}<th>{{ c.label }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <th scope="row">Can it work?</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}Yes{% else %}<span class="bad">No</span><br>{{ c.error }}{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">Teams formed</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}{{ c.proposal.teams|length }}{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">Projects with no team</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}{{ c.proposal.unused_projects|length }}{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">First choice</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}{{ c.proposal.rank_counts.first }}{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">Second choice</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}{{ c.proposal.rank_counts.second }}{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">Third choice</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}{{ c.proposal.rank_counts.third }}{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">Not ranked</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}<span{% if c.proposal.rank_counts.unranked %} class="bad"{% endif %}>{{ c.proposal.rank_counts.unranked }}</span>{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            <tr>
+                <th scope="row">Worst placement</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}<span{% if not c.proposal.worst_rank %} class="bad"{% endif %}>{{ c.proposal.worst_rank_label|capfirst }}</span>{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            {% if max_rank %}
+            <tr>
+                <th scope="row">Students beyond the fairness limit</th>
+                {% for c in comparisons %}<td>{% if c.proposal %}<span{% if c.proposal.beyond_limit %} class="bad"{% endif %}>{{ c.proposal.beyond_limit }}</span>{% else %}-{% endif %}</td>{% endfor %}
+            </tr>
+            {% endif %}
+            <tr>
+                <th scope="row"></th>
+                {% for c in comparisons %}
+                <td>
+                    {% if c.proposal %}
+                    <form method="post" action="{% url 'admin:project_semester_propose_with' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="semester" value="{{ semester.id }}">
+                        <input type="hidden" name="min_size" value="{{ c.min_size }}">
+                        <input type="hidden" name="capacity" value="{{ c.capacity }}">
+                        <input type="hidden" name="max_rank" value="{{ max_rank }}">
+                        <input type="submit" value="Open this proposal" aria-label="Open the proposal for teams of {{ c.label }}">
+                    </form>
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+        </tbody>
+    </table>
+
+    <p class="comparison-note">Opening a proposal shows its teams, where you can move students and approve as usual. To make a size the default for this semester, edit the semester.</p>
+    <p><a href="{% url 'admin:project_semester_changelist' %}" class="button">Back to semesters</a></p>
+</div>
+{% endblock %}
