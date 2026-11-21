@@ -23,6 +23,7 @@ COPY . .
 
 RUN sed -i 's/\r$//g' /usr/src/app/entrypoint.prod.sh \
     && chmod +x /usr/src/app/entrypoint.prod.sh \
+    && mkdir -p /usr/src/app/staticfiles \
     && chown -R appuser:appgroup /usr/src/app
 
 USER appuser
