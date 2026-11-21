@@ -104,21 +104,21 @@ A backend test file is named for what it tests: the layer (`test_models`, `test_
 
 ### Where the tests are
 
-544 automated tests as of 2026-11-20: 469 backend and 75 frontend.
+571 automated tests as of 2026-11-21: 496 backend and 75 frontend.
 
 ```mermaid
 pie showData
     title Automated tests by area
-    "Backend: project" : 269
-    "Backend: user" : 134
+    "Backend: project" : 294
+    "Backend: user" : 136
     "Backend: emails" : 66
     "Frontend" : 75
 ```
 
 | Largest backend test files | Tests | What they cover |
 |---|---|---|
+| `project/tests/test_assignment.py` | 79 | The solver, moving students, approval, team sizes, the fairness limit and the comparison |
 | `project/tests/test_views.py` | 79 | The project API for each role |
-| `project/tests/test_assignment.py` | 56 | The solver, moving students, approval, team sizes |
 | `project/tests/test_models.py` | 52 | Model rules, including attachments |
 | `user/tests/test_resources.py` | 42 | The Blackboard roster import |
 | `user/tests/test_models.py` | 37 | Sponsor and student validation |

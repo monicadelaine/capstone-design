@@ -2,11 +2,11 @@
 
 **Audience:** developers.
 
-Two automated suites exist, and both run inside the dev containers. Counts are as of 2026-11-20 and will grow. For how tests are organized and written, see [conventions](../development-guide/conventions.md#tests).
+Two automated suites exist, and both run inside the dev containers. Counts are as of 2026-11-21 and will grow. For how tests are organized and written, see [conventions](../development-guide/conventions.md#tests).
 
 | Suite | Runner | Where the tests live | Tests |
 |---|---|---|---|
-| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 469 |
+| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 496 |
 | Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 75 |
 
 ## Run everything with one command
@@ -56,15 +56,17 @@ DJANGO_ALLOWED_HOSTS=localhost SECRET_KEY=test .venv/bin/pytest -q
 
 **Backend**, by Django app:
 
-- `project`: instructor review of submitted projects (approve, reject, who may do it, and what students then see); model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences (a student sees and changes only their own), assignments (student, teammate, and sponsor visibility; admin-only writes), semesters (login to read, admin to write), and feedback; the `seed_demo` command; admin actions for project status, semester membership, and assigning students to projects; the proposed-assignment solver, its approve step, and the semester admin flow.
-- `user`: Sponsor and Student models and validators (phone, CWID); serializers; the sponsor and student endpoints and the profile endpoint; sponsor admin email actions.
-- `emails`: email serializers; the send endpoints, including admin-only access; the email client, template rendering, and EML export helpers.
+- `project` (294 tests): instructor review of submitted projects (approve, reject, who may do it, and what students then see); model validation and constraints for Project, Semester, Preference, Assignment, Feedback, and Attachment; serializers, including the sponsor ownership and `projects_allowed` rules; API views for projects (CRUD, filters, and who may write by role), preferences (a student sees and changes only their own), assignments (student, teammate, and sponsor visibility; admin-only writes), semesters (login to read, admin to write), and feedback; the `seed_demo` command; admin actions for project status, semester membership, and assigning students to projects; the proposed-assignment solver, team sizes, moving students before approval, the fairness limit and the team-size comparison, the approve step, and the semester admin flow; attachment and feedback ownership rules, including rejected projects staying hidden in downloads.
+- `user` (136 tests): Sponsor and Student models and validators (phone, CWID); serializers; the sponsor and student endpoints and the profile endpoint; sponsor admin email actions; the Blackboard roster import (matching on CWID, bad rows, header variants, encoding, who may import); Auth0 token validation (RS256 only, key IDs, the signing-key cache); admin-only writes to student and sponsor records, and that a student token cannot add itself to the roster.
+- `emails` (66 tests): email serializers; the send endpoints, including admin-only access and the send log; the email client, template rendering, and EML export helpers; the student notification emails (who receives them, the sending guard, the once-per-semester reminder).
 
 **Frontend**:
 
 - `services/api.test.js`: bearer token handling, endpoint URLs, student data normalization.
 - `stores/`: `projectsStore` and `studentStore` fetch flows, fallbacks, getters, and reset.
-- `components/`: ConfirmationModal, Sidebar, and SponsorProjectForm (profile line, project-limit lockout, submit payload and in-flight lock, inline server errors).
+- `services/teams.test.js`: grouping assignments into teams for the student and sponsor views.
+- `router/index.test.js`: where a logged-in user lands by role, including a user with no role.
+- `components/`: ConfirmationModal, Sidebar, SponsorProjectForm (profile line, project-limit lockout, submit payload and in-flight lock, inline server errors), ProjectAttachments, ProjectDetailsSidebar, SponsorLanding, SponsorProjectCard, StudentAssignment, and StudentAssignmentCard.
 
 The backend README has a fuller per-file breakdown under "Unit Tests (Pytest)".
 
@@ -83,4 +85,4 @@ The backend README has a fuller per-file breakdown under "Unit Tests (Pytest)".
 - No end-to-end or browser tests. Auth0 login, the Vite proxy to the backend, and the real Postgres and MinIO services are only exercised by hand.
 - CI runs the backend suite on SQLite because no `SQL_ENGINE` is set there, while local runs use Postgres in the container. Both pass today, but Postgres-specific behavior is not checked in CI.
 - No coverage threshold is enforced.
-- Frontend tests cover 6 of the 26 components.
+- Frontend tests cover 9 of the 21 components, plus the router, both stores, and both service modules.

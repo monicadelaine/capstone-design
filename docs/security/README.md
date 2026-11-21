@@ -8,15 +8,14 @@ Assessed 2026-11-20 against `main`. This is a review by the development team, no
 
 The application we inherited had no access control beyond "is logged in", and two groups of endpoints needed no login at all. That is fixed: every API endpoint now requires a valid Auth0 token and checks the caller's role, and students and sponsors can reach only their own records. The fixes are covered by automated tests that run on every pull request.
 
-What remains is narrower. In order of importance:
+The assessment itself found two defects, and both were fixed and merged with tests on 2026-11-21 (see [Fixed during this assessment](#fixed-during-this-assessment)). What remains is narrower. In order of importance:
 
 | # | Open item | Risk |
 |---|---|---|
-| 1 | Two fixes found during this assessment are waiting for review: PR #118 (anyone with a university email could add themselves to the roster) and PR #116 (a sponsor's name was shown unescaped in the instructor's admin) | High until merged |
-| 2 | 21 known advisories in frontend packages, 9 of them in packages that ship to the browser; 3 in the backend's token library | Medium |
-| 3 | Any logged-in user can read the whole student and sponsor roster through the API | Medium |
-| 4 | No backup of the database; uploaded files are lost on redeploy unless a bucket is configured | Medium (availability) |
-| 5 | The accounts the site depends on belong to students | Medium (availability) |
+| 1 | 21 known advisories in frontend packages, 9 of them in packages that ship to the browser; 3 in the backend's token library | Medium |
+| 2 | Any logged-in user can read the whole student and sponsor roster through the API | Medium |
+| 3 | No backup of the database; uploaded files are lost on redeploy unless a bucket is configured | Medium (availability) |
+| 4 | The accounts the site depends on belong to students | Medium (availability) |
 
 The full list is under [Open findings](#open-findings).
 
@@ -24,13 +23,13 @@ The full list is under [Open findings](#open-findings).
 
 | Method | What it covered | Result |
 |---|---|---|
-| Called every API endpoint as six kinds of user: not logged in, a student on the roster, a student token not on the roster, a sponsor, a logged-in user with no role, an admin | Who can read and write what | The [access table](#who-can-do-what) below. One defect found (item 1) |
-| Read the code that renders user-typed text in Django admin | Stored script injection | One defect found (item 1) |
+| Called every API endpoint as six kinds of user: not logged in, a student on the roster, a student token not on the roster, a sponsor, a logged-in user with no role, an admin | Who can read and write what | The [access table](#who-can-do-what) below. One defect found and fixed (PR #118) |
+| Read the code that renders user-typed text in Django admin | Stored script injection | One defect found and fixed (PR #116) |
 | `python manage.py check --deploy` on the production stack | Django's own deployment checklist | 4 warnings, listed below |
 | `pip-audit` on `backend/requirements.txt` and `npm audit` on `frontend/package-lock.json` | Known vulnerabilities in dependencies | 3 backend, 21 frontend |
 | Searched the repository and its history for secrets and committed `.env` files | Leaked credentials | None. Only the three example templates were ever committed |
 | Checked the live site's headers and certificate from outside | HTTPS and response headers | HTTPS with redirect; `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy` present |
-| Reviewed the existing security tests | That each fix is pinned by a test | 30 tests in three files, plus permission tests beside each feature |
+| Reviewed the existing security tests | That each fix is pinned by a test | 38 tests in three files, plus permission tests beside each feature |
 
 Not done: testing against the live Auth0 tenant (the tests stand in for it), load or denial-of-service testing, and any review of the VM itself, which the author of this page has no access to.
 
@@ -103,7 +102,7 @@ Each cell is the response observed on 2026-11-20. 403 means refused; 404 means t
 | Send email through the API | 403 | 403 | 403 | 403 | Yes |
 | Health check | Yes | Yes | Yes | Yes | Yes |
 
-The "no role" column is a person who has logged in through Auth0 but is neither on the roster nor a sponsor. They can read the project list, the semesters, and the roster, and nothing else. The bold row is open finding 3.
+The "no role" column is a person who has logged in through Auth0 but is neither on the roster nor a sponsor. They can read the project list, the semesters, and the roster, and nothing else. The bold row is open finding 2.
 
 Two rules the table cannot show:
 
@@ -147,22 +146,27 @@ Severity is the team's judgment: **High** could expose or corrupt a class's data
 
 | # | Finding | Severity | What to do | Tracked |
 |---|---|---|---|---|
-| 1a | `POST /profile/` created a Student record for any token with the student role, which Auth0 gives to every verified `@crimson.ua.edu` address. Someone outside the class could add themselves, rank projects, and be placed on a team | High | Merge the fix | PR #118 |
-| 1b | The admin project list showed the sponsor's self-typed name without escaping it | High | Merge the fix | PR #116, #7 |
-| 2a | `npm audit`: 21 advisories (14 high, 7 moderate). 9 are in packages that ship to the browser, including `axios` and `vue`; the rest are in build and test tools | Medium | `npm audit fix`, run the tests, rebuild | None yet |
-| 2b | `pip-audit`: 3 advisories, in `python-jose` and its dependency `ecdsa`, with no fixed version listed. This is the library that verifies tokens | Medium | Read the advisories against how we use it (RS256 only). Consider moving to PyJWT, which is actively maintained | None yet |
-| 3 | Any logged-in user can list every student and sponsor with their email | Medium | Scope the two list endpoints the way assignments are scoped | [User records](user-records.md) |
-| 4 | No database backup; uploads live inside the container unless `GS_BUCKET_NAME` is set | Medium | See the [deployment guide](../deployment-guide/README.md) | #83 |
-| 5 | The Google Cloud project, the domain, the Auth0 tenant, and the sending mail account are tied to students' accounts | Medium | Hand each to the instructor; make her an Auth0 tenant admin | #45, [FAQ](../faq/README.md) |
-| 6 | The Auth0 Action decides "student" from the email domain, and the signup page still sends a role hint | Low once 1a is merged | Give the student role only to addresses on the roster, and remove the hint | #77 |
-| 7 | The live site may still use the previous team's Auth0 tenant | Medium | Switch it and redeploy | #58 |
-| 8 | `check --deploy` warnings: session and CSRF cookies are not marked secure, no HSTS, no HTTPS redirect in Django (Caddy already redirects) | Low | Set the four settings when `DEBUG` is off | None yet |
-| 9 | No rate limiting on the API | Low | Add DRF throttling, at least on the profile and preferences endpoints | None yet |
-| 10 | Uploads are checked by file extension only, with no content check or virus scan; zip is allowed | Low | Check the file signature; consider dropping zip | [File hosting](../investigations/file-hosting.md) |
-| 11 | Any logged-in student can download any visible project's files | Ask the sponsor | Restrict if project files are confidential | [Attachment permissions](attachment-feedback-permissions.md) |
-| 12 | The API's HTML browsing pages are enabled in production | Low | Use only the JSON renderer when `DEBUG` is off | None yet |
-| 13 | A real Auth0 key rotation has never been rehearsed | Low | Rotate the key on a test tenant and confirm logins continue | [Key cache](jwks-cache-debug-panel.md) |
-| 14 | The tests replace Auth0 with a stand-in; no test logs in for real | Low | One browser test of login | None yet |
+| 1a | `npm audit`: 21 advisories (14 high, 7 moderate). 9 are in packages that ship to the browser, including `axios` and `vue`; the rest are in build and test tools | Medium | `npm audit fix`, run the tests, rebuild | None yet |
+| 1b | `pip-audit`: 3 advisories, in `python-jose` and its dependency `ecdsa`, with no fixed version listed. This is the library that verifies tokens | Medium | Read the advisories against how we use it (RS256 only). Consider moving to PyJWT, which is actively maintained | None yet |
+| 2 | Any logged-in user can list every student and sponsor with their email | Medium | Scope the two list endpoints the way assignments are scoped | [User records](user-records.md) |
+| 3 | No database backup; uploads live inside the container unless `GS_BUCKET_NAME` is set | Medium | See the [deployment guide](../deployment-guide/README.md) | #83 |
+| 4 | The Google Cloud project, the domain, the Auth0 tenant, and the sending mail account are tied to students' accounts | Medium | Hand each to the instructor; make her an Auth0 tenant admin | #45, [FAQ](../faq/README.md) |
+| 5 | The Auth0 Action decides "student" from the email domain, and the signup page still sends a role hint | Low | Give the student role only to addresses on the roster, and remove the hint | #77 |
+| 6 | The live site may still use the previous team's Auth0 tenant | Medium | Switch it and redeploy | #58 |
+| 7 | `check --deploy` warnings: session and CSRF cookies are not marked secure, no HSTS, no HTTPS redirect in Django (Caddy already redirects) | Low | Set the four settings when `DEBUG` is off | None yet |
+| 8 | No rate limiting on the API | Low | Add DRF throttling, at least on the profile and preferences endpoints | None yet |
+| 9 | Uploads are checked by file extension only, with no content check or virus scan; zip is allowed | Low | Check the file signature; consider dropping zip | [File hosting](../investigations/file-hosting.md) |
+| 10 | Any logged-in student can download any visible project's files | Ask the sponsor | Restrict if project files are confidential | [Attachment permissions](attachment-feedback-permissions.md) |
+| 11 | The API's HTML browsing pages are enabled in production | Low | Use only the JSON renderer when `DEBUG` is off | None yet |
+| 12 | A real Auth0 key rotation has never been rehearsed | Low | Rotate the key on a test tenant and confirm logins continue | [Key cache](jwks-cache-debug-panel.md) |
+| 13 | The tests replace Auth0 with a stand-in; no test logs in for real | Low | One browser test of login | None yet |
+
+## Fixed during this assessment
+
+| Finding | Severity | Fix |
+|---|---|---|
+| `POST /profile/` created a Student record for any token with the student role, which Auth0 gives to every verified `@crimson.ua.edu` address. Someone outside the class could have added themselves, ranked projects, and been placed on a team | High | PR #118, merged 2026-11-21. The endpoint now refuses, with a test that fails on the old code |
+| The admin project list showed the sponsor's self-typed name without escaping it (the first point in the cyber team's notes, #7) | High | PR #116, merged 2026-11-21, with a test that fails on the old code |
 
 ## Maintenance checklist
 

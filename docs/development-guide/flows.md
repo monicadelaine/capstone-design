@@ -175,6 +175,10 @@ flowchart TD
 
 Team sizes come from the semester (`Semester.team_size`, `min_team_size`), and a project can set its own maximum (`Project.max_team_size`).
 
+**Fairness limit (optional).** By default the solver minimises the total cost, which can leave one student much worse off than the rest. When proposing, the instructor can pick a limit on the worst placement any student gets, for example "nobody below their second choice". `solve(..., max_rank=...)` then adds a penalty for every placement beyond the limit that is larger than anything the rankings can add up to, so the solver first keeps as many students as possible within the limit and only then optimises the rankings. If the limit cannot be met for everyone, it gets as close as it can and the proposal page says how many students are beyond it (`Proposal.worst_rank`, `Proposal.beyond_limit`).
+
+**Comparing team sizes.** The **Compare team sizes** action runs the solver once per setting the instructor types (`4`, `3-4`, `3-5`) and shows the results side by side: whether each setting can work, how many teams form, how many students get each choice, and the worst placement. `compare(semester, settings, max_rank)` returns one `Comparison` per setting and saves nothing; each column has a button that opens the ordinary proposal page for that setting.
+
 ### Why there is a token
 
 A proposal is never stored. The proposal page carries it in a hidden form field as a signed token (`django.core.signing`, one-hour expiry). The token holds the student-project pairs, the size limits, and the solver's original pairs. Each re-check issues a new token; approval verifies the signature and re-checks that every student and project still exists. This avoids a proposal table and a status column.
@@ -208,9 +212,9 @@ sequenceDiagram
 
 | Step | Files |
 |---|---|
-| Solver and proposal logic | `backend/project/assignment.py`: `solve`, `team_limits`, `propose`, `edit`, `pending_moves`, `approve`, `approve_with_changes`, and the `Proposal` and `Team` dataclasses |
-| Instructor screens | `SemesterAdmin` in `backend/project/admin.py`: the `propose_assignments` action, `edit_assignments_view`, `approve_assignments_view`, `can_assign` |
-| The page | `backend/templates/admin/project/semester/assignment_proposal.html` |
+| Solver and proposal logic | `backend/project/assignment.py`: `solve`, `team_limits`, `beyond_limit`, `propose`, `compare`, `parse_settings`, `edit`, `pending_moves`, `approve`, `approve_with_changes`, and the `Proposal`, `Team` and `Comparison` dataclasses |
+| Instructor screens | `SemesterAdmin` in `backend/project/admin.py`: the `propose_assignments` and `compare_team_sizes` actions, `propose_with_view`, `edit_assignments_view`, `approve_assignments_view`, `can_assign` |
+| The pages | `backend/templates/admin/project/semester/assignment_proposal.html`, `team_size_comparison.html` |
 | Team size settings | `Semester.team_size`, `Semester.min_team_size`, `Project.max_team_size` in `backend/project/models.py` |
 | Who sees the result | `AssignmentViewSet.get_queryset` in `backend/project/views.py`: a student sees their team, a sponsor sees their projects' teams |
 | Student screen | `frontend/src/components/StudentAssignment.vue`, `StudentAssignmentCard.vue` |

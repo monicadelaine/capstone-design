@@ -1,5 +1,7 @@
 # Auth0 JWKS cache and removal of DEBUG overlay (SECURITY-04 #78)
 
+**Status:** merged in PR #105 on 2026-11-17, closing #78. Part of the [security assessment](README.md).
+
 ## Backend
 - Cache Auth0's published public signing keys for five minutes using Django's cache.
 - Validate the header algorithm and key ID before consulting the remote JWKS endpoint.
@@ -13,7 +15,7 @@
 
 ## Verification
 - `python -m pytest -q user/tests/test_authentication_security.py` from `backend/`
-- `python -m pytest -q` from `backend/` (compare pre-existing email failures)
+- `python -m pytest -q` from `backend/`
 - `npm test -- --run` from `frontend/`
 - `git diff --check` and verify the PR file list
 
