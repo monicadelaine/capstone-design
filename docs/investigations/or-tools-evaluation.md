@@ -58,7 +58,7 @@ Sample data is skewed toward a few popular projects, which is the hard case. Run
 
 - **Dependency size:** the `ortools` wheel is large (about 25 MB). Acceptable for the backend image.
 - **Infeasible input:** too few project seats makes the model unsolvable. The script raises an error instead of returning a partial answer. The feature must show the admin a clear message.
-- **Fairness:** minimising total cost can leave one student much worse off than everyone else. If the sponsor cares, add a cap on the worst rank any student gets.
+- **Fairness:** minimising total cost can leave one student much worse off than everyone else. If the sponsor cares, add a cap on the worst rank any student gets. *Done in #107:* Propose assignments has a fairness limit, and Compare team sizes shows the worst placement for each setting.
 
 ## Recommendation
 

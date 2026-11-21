@@ -102,6 +102,7 @@ The backend test suite uses `pytest` with `pytest-django` and is organized by ap
     - CP-SAT model: known optimum, unused projects, exact and minimum team sizes, infeasible input
     - `propose`: cohort from the semester's preferences, cancelled projects skipped, clear errors; saves nothing
     - `approve`: creates or replaces `Assignment` rows; rejects tampered, expired, or stale proposals
+    - Fairness and comparison (#107): a limit on the worst placement changes the result when it can be met and gets as close as possible when it cannot; the proposal reports the worst placement; team-size input is parsed and bad input explained; a comparison gives one column per setting, reports an infeasible one in its column, and saves nothing; opening a column gives a normal proposal and needs assignment permissions
     - Team sizes (#68): the semester's team size and minimum, a project's own maximum (smaller, larger, or below the minimum), seats counted per project, infeasible settings reported as a message, and moves and approval held to a project's own maximum
     - `edit` (moving students before approval): ranks recomputed, team-size violations listed, moves build on the last check, unknown students and off-semester projects rejected; approve saves the edited proposal and refuses one outside the size limits
     - Semester admin flow: propose action renders the table, moving a student re-checks it and approve saves the edit, violations disable Approve, unchecked moves are re-checked instead of saved, approve checks permissions

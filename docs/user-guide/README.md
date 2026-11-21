@@ -425,10 +425,20 @@ Do this **after the ranking deadline**.
 - Check **Preferences** to see what students submitted. The **Student Assigned** filter shows who does and does not have a team yet. Only students who submitted rankings are included in the proposal.
 - Make sure the semester's projects are on the semester, and that the team sizes are right ([step 1](#1-set-up-a-semester)). Cancelled projects are skipped.
 
+**Not sure which team size to use? Compare them first (optional):**
+
+1. Go to **Semesters**, tick the one semester, choose **Compare team sizes** from the **Action** menu, and click **Go**.
+2. Type the sizes to compare, separated by commas: `4` means teams of exactly 4, and `3-4` means teams of 3 to 4. Pick a fairness limit if you want one (see below), and confirm.
+3. Each column shows what the solver would propose with that size: whether it can work, how many teams form, how many students get each choice, and the worst placement anyone gets. Nothing is saved, and the semester's own team size does not change.
+4. Click **Open this proposal** under the column you prefer to review and approve it as usual. To make that size the default for the semester, edit the semester.
+
 **Propose:**
 
 1. Go to **Semesters**, tick the one semester, choose **Propose assignments** from the **Action** menu, and click **Go**.
-2. If the settings cannot work for the number of students, a message says so and nothing is proposed. Change the team sizes and try again.
+2. Choose a **Fairness limit** if you want one, and confirm.
+   - **No limit** gives the lowest total across the class. One student can end up much worse off than the rest.
+   - **Nobody on a project they did not rank**, **Nobody below their second choice**, or **Everybody gets a first choice** keeps every student at or above that choice when that is possible. When it is not, the proposal keeps as many students within the limit as it can and says how many are beyond it.
+3. If the settings cannot work for the number of students, a message says so and nothing is proposed. Change the team sizes and try again.
 
 **Review the proposal:**
 
@@ -437,6 +447,7 @@ Do this **after the ranking deadline**.
 *Figure 13: The proposal page. Each project lists its students and the rank each gave it.*
 
 - Each project is listed with its students and the **rank each student gave it**.
+- The summary at the top shows the **worst placement** anyone got and, if you chose a fairness limit, whether it was met for every student.
 - A student placed on a project they **did not rank** is shown in **red**.
 - A project with its own maximum is marked "up to N students".
 - Projects with no team are listed under the table.
