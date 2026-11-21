@@ -154,7 +154,7 @@ Severity is the team's judgment: **High** could expose or corrupt a class's data
 | 3 | Any logged-in user can list every student and sponsor with their email | Medium | Scope the two list endpoints the way assignments are scoped | [User records](user-records.md) |
 | 4 | No database backup; uploads live inside the container unless `GS_BUCKET_NAME` is set | Medium | See the [deployment guide](../deployment-guide/README.md) | #83 |
 | 5 | The Google Cloud project, the domain, the Auth0 tenant, and the sending mail account are tied to students' accounts | Medium | Hand each to the instructor; make her an Auth0 tenant admin | #45, [FAQ](../faq/README.md) |
-| 6 | The Auth0 Action decides "student" from the email domain, and the signup page still sends a role hint | Low once 1a is merged | Finish server-side roles as ADR-002 describes | #77 |
+| 6 | The Auth0 Action decides "student" from the email domain, and the signup page still sends a role hint | Low once 1a is merged | Give the student role only to addresses on the roster, and remove the hint | #77 |
 | 7 | The live site may still use the previous team's Auth0 tenant | Medium | Switch it and redeploy | #58 |
 | 8 | `check --deploy` warnings: session and CSRF cookies are not marked secure, no HSTS, no HTTPS redirect in Django (Caddy already redirects) | Low | Set the four settings when `DEBUG` is off | None yet |
 | 9 | No rate limiting on the API | Low | Add DRF throttling, at least on the profile and preferences endpoints | None yet |
