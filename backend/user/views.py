@@ -97,19 +97,16 @@ def profile_view(request):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         elif role == 'student':
-            if Student.objects.filter(email=email).exists():
-                return Response(
-                    {'error': 'Profile already exists'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            serializer = StudentSerializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save(email=email)
-                return Response({
-                    'type': 'student',
-                    'data': serializer.data
-                }, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Students are added only by the roster import (ADR-002). A student token alone,
+            # which Auth0 gives to any verified @crimson.ua.edu address, must not add a row.
+            return Response(
+                {
+                    'error': 'students_cannot_create',
+                    'message': 'Students are added by the instructor from the class roster. '
+                               'Contact your professor if you should have access.'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         return Response(
             {'error': 'No role assigned'},
