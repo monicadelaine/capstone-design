@@ -111,7 +111,7 @@ class ProjectAdmin(ImportExportModelAdmin):
     @admin.display(description='Sponsor')
     def sponsor_link(self, obj):
         url = reverse('admin:user_sponsor_change', args=[obj.sponsor.id])
-        return format_html(f'<a href="{url}">{obj.sponsor}</a>')
+        return format_html('<a href="{}">{}</a>', url, obj.sponsor)
 
     @action_with_form(ChangeProjectStatusActionForm, permissions=['change'], description='Change status')
     def change_project_status_action(self, request, queryset, data):
@@ -287,7 +287,7 @@ class SemesterAdmin(ImportExportModelAdmin):
     def projects_count(self, obj):
         url = (reverse('admin:project_project_changelist') + '?' + urlencode({'semester': obj.id}))
         count = obj.projects.count()
-        return format_html(f'<a href="{url}">{count}</a>')
+        return format_html('<a href="{}">{}</a>', url, count)
 
     @admin.display(description='Team size')
     def team_sizes(self, obj):

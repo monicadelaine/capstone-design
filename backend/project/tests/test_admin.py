@@ -134,6 +134,26 @@ class TestProjectAdminActions:
 
 
 @pytest.mark.django_db
+class TestProjectAdminSponsorLink:
+    """The Sponsor column of the project list shows a name the sponsor typed themselves."""
+
+    def test_the_sponsor_name_is_escaped(self, sample_project, sample_sponsor):
+        sample_sponsor.first_name = '<b>Alice</b>'
+        sample_sponsor.save()
+
+        html = ProjectAdmin(Project, admin.site).sponsor_link(sample_project)
+
+        assert '<b>' not in html
+        assert '&lt;b&gt;Alice&lt;/b&gt;' in html
+        assert f'/user/sponsor/{sample_sponsor.id}/change/' in html
+
+    def test_a_name_with_braces_does_not_break_the_page(self, sample_project, sample_sponsor):
+        sample_sponsor.last_name = '{Walker}'
+        sample_sponsor.save()
+
+        assert '{Walker}' in ProjectAdmin(Project, admin.site).sponsor_link(sample_project)
+
+
 class TestPreferenceAdminAction:
     def test_assign_to_project_creates_assignments(self, rf, admin_user, sample_student, sample_project, sample_sponsor, matching_semester):
         other_project = Project.objects.create(name="Other Project", sponsor=sample_sponsor)
