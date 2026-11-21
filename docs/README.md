@@ -11,5 +11,5 @@ Handoff documentation for the Capstone Design Manager. Each folder names its aud
 | [security/](security/) | developers, the sponsor | security assessment and maintenance checklist |
 | [decisions/](decisions/) | developers | architecture decision records |
 | [investigations/](investigations/) | developers | technical investigations, including the [v1 reference](investigations/v1-reference.md) and the [OR-Tools evaluation](investigations/or-tools-evaluation.md) |
-| [recommendations/](recommendations/) | the sponsor, future teams | recommendations we did not implement |
+| [recommendations/](recommendations/) | the sponsor, future teams | what to do next and in what order, and what we considered and decided against |
 | [faq/](faq/) | whoever inherits the project | handoff questions and account ownership |
