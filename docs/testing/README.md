@@ -2,12 +2,12 @@
 
 **Audience:** developers.
 
-Two automated suites exist, and both run inside the dev containers. Counts are as of 2026-10-26 and will grow.
+Two automated suites exist, and both run inside the dev containers. Counts are as of 2026-11-20 and will grow. For how tests are organized and written, see [conventions](../development-guide/conventions.md#tests).
 
 | Suite | Runner | Where the tests live | Tests |
 |---|---|---|---|
-| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 391 |
-| Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 56 |
+| Backend | `pytest` with `pytest-django` | `backend/<app>/tests/` | 469 |
+| Frontend | `vitest` with `@vue/test-utils` and `jsdom` | `frontend/src/**/*.test.js` | 75 |
 
 ## Run everything with one command
 
