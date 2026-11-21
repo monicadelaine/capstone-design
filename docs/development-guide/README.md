@@ -2,6 +2,29 @@
 
 **Audience:** developers on the team. How to run the project locally and how we use branches and pull requests.
 
+## Start here
+
+This page gets the project running on your machine. To understand and change the code, read these in order:
+
+| Page | What it answers |
+|---|---|
+| [Architecture](architecture.md) | How is the code organized? How does a request travel through it? How does the app know who is a student, a sponsor, or an admin? |
+| [Main flows](flows.md) | How does each feature work, and which files do the work? Project submission, ranking, the roster import, assignments and the solver, emails, attachments. |
+| [Adding a feature](adding-a-feature.md) | How do I add a model field, an endpoint with its permission, a screen, and tests for each? A worked example. |
+| [Conventions](conventions.md) | What patterns does the code follow? Permissions and scoping, where logic goes, the test layout, how to run tests. |
+| [Data model](data-model.md) | What are the tables and how do they relate? |
+| [Auth0 setup](auth0-setup.md) | How is the login tenant configured? |
+
+```mermaid
+flowchart LR
+    S["This page:<br/>run it locally"] --> A["Architecture"]
+    A --> F["Main flows"]
+    F --> N["Adding a feature"]
+    N --> C["Conventions"]
+    A -.-> D["Data model"]
+    A -.-> O["Auth0 setup"]
+```
+
 Originally written by Noland Miller as *CS 495 Website Deployment Directions* (Word). Converted to Markdown here so it is versioned with the code. Commands are shown for PowerShell; on macOS or Linux use `cp` instead of `Copy-Item` and forward slashes.
 
 
