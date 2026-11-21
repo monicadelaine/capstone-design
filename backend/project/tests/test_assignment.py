@@ -7,7 +7,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from project.assignment import (
-    TOKEN_SALT, ProposalError, approve, approve_with_changes, edit, pending_moves, propose, solve,
+    TOKEN_SALT, ProposalError, approve, approve_with_changes, compare, edit, parse_settings, pending_moves,
+    propose, solve,
 )
 from project.models import Assignment, Preference, Project, Semester
 from user.authentication import UserWrapper
@@ -253,6 +254,113 @@ class TestTeamSizeReviewFollowUps:
 
         assert [team.project.name for team in proposal.teams] == ['Beta']
         assert proposal.overrides == {alpha.id: 0}
+
+
+# Five students, five projects, teams of 1. The lowest total puts a..e on their first choices and
+# leaves d on its third choice (cost 3). Keeping everyone at second or better costs 4.
+CHAIN = {
+    'a': {'P1': 1, 'P2': 2},
+    'b': {'P2': 1, 'P3': 2},
+    'c': {'P3': 1, 'P4': 2},
+    'e': {'P4': 1, 'P5': 2},
+    'd': {'P1': 1, 'P5': 3},
+}
+CHAIN_PROJECTS = ['P1', 'P2', 'P3', 'P4', 'P5']
+
+
+class TestFairnessLimit:
+    def test_without_a_limit_the_lowest_total_leaves_one_student_on_a_third_choice(self):
+        result, _ = solve(CHAIN, CHAIN_PROJECTS, capacity=1)
+        assert result == {'a': 'P1', 'b': 'P2', 'c': 'P3', 'e': 'P4', 'd': 'P5'}
+
+    def test_a_limit_of_second_choice_moves_everyone_within_it(self):
+        result, status = solve(CHAIN, CHAIN_PROJECTS, capacity=1, max_rank=2)
+        assert status == 'OPTIMAL'
+        assert result == {'d': 'P1', 'a': 'P2', 'b': 'P3', 'c': 'P4', 'e': 'P5'}
+        assert max(CHAIN[s][p] for s, p in result.items()) == 2
+
+    def test_a_limit_that_already_holds_changes_nothing(self):
+        assert solve(CHAIN, CHAIN_PROJECTS, capacity=1, max_rank=3) == solve(CHAIN, CHAIN_PROJECTS, capacity=1)
+
+    def test_a_limit_that_cannot_be_met_gets_as_close_as_possible(self):
+        # Three students all want only P1, one seat each: two must go beyond a first-choice limit.
+        prefs = {s: {'P1': 1} for s in 'xyz'}
+        result, status = solve(prefs, ['P1', 'P2', 'P3'], capacity=1, max_rank=1)
+        assert status == 'OPTIMAL'
+        assert sorted(result.values()) == ['P1', 'P2', 'P3']
+
+
+class TestParseSettings:
+    def test_reads_exact_sizes_and_ranges(self):
+        assert parse_settings('4, 3-4, 4 to 5') == [(4, 4), (3, 4), (4, 5)]
+
+    def test_drops_repeats(self):
+        assert parse_settings('4, 4-4, 3-4') == [(4, 4), (3, 4)]
+
+    @pytest.mark.parametrize('text, message', [
+        ('4', 'at least two'),
+        ('', 'at least two'),
+        ('4, four', 'is not a team size'),
+        ('4, 5-3', 'no larger than the team size'),
+        ('4, 0-3', 'at least 1'),
+    ])
+    def test_explains_bad_input(self, text, message):
+        with pytest.raises(ProposalError, match=message):
+            parse_settings(text)
+
+
+@pytest.mark.django_db
+class TestFairProposals:
+    @pytest.fixture
+    def chain(self, semester, sponsor):
+        """The CHAIN case in the database, with teams of 1."""
+        projects = dict(zip(CHAIN_PROJECTS, make_projects(semester, sponsor, CHAIN_PROJECTS)))
+        students = dict(zip('abced', make_students(5)))
+        for name, ranks in CHAIN.items():
+            for project, value in ranks.items():
+                Preference.objects.create(student=students[name], project=projects[project], rank=value)
+        Semester.objects.filter(pk=semester.pk).update(team_size=1, min_team_size=1)
+        semester.refresh_from_db()
+        return semester
+
+    def test_proposal_reports_the_worst_placement(self, chain):
+        proposal = propose(chain)
+        assert proposal.worst_rank == 3
+        assert proposal.worst_rank_label == 'third choice'
+        assert (proposal.max_rank, proposal.beyond_limit) == (None, 0)
+
+    def test_limit_is_met_and_recorded(self, chain):
+        proposal = propose(chain, max_rank=2)
+        assert proposal.worst_rank == 2
+        assert (proposal.max_rank, proposal.beyond_limit) == (2, 0)
+        assert proposal.rank_counts == {'first': 1, 'second': 4, 'third': 0, 'unranked': 0}
+
+    def test_unmet_limit_is_counted_not_refused(self, chain):
+        proposal = propose(chain, max_rank=1)
+        assert proposal.beyond_limit >= 1
+        assert proposal.student_count == 5
+
+    def test_unranked_placement_is_the_worst(self, semester, sponsor):
+        alpha, beta = make_projects(semester, sponsor, ['Alpha', 'Beta'])
+        for s in make_students(2):
+            rank(s, alpha)
+        proposal = propose(semester, capacity=1)
+        assert proposal.worst_rank is None
+        assert proposal.worst_rank_label == 'a project they did not rank'
+
+    def test_limit_survives_a_move(self, chain):
+        proposal = propose(chain, max_rank=2)
+        assert edit(proposal.token(), {}).max_rank == 2
+
+    def test_compare_gives_one_result_per_setting_and_saves_nothing(self, chain):
+        results = compare(chain, [(1, 1), (2, 2), (1, 2)])
+
+        assert [c.label for c in results] == ['1', '2', '1 to 2']
+        assert results[0].proposal.worst_rank == 3
+        assert results[1].proposal is None
+        assert 'No assignment puts 5 students into teams of 2' in results[1].error
+        assert results[2].proposal is not None
+        assert Assignment.objects.count() == 0
 
 
 @pytest.mark.django_db
@@ -601,3 +709,71 @@ class TestSemesterAdminFlow:
         content = response.content.decode()
         assert 'up to 1 student' in content
         assert 'projects with their own maximum are marked' in content
+
+
+    def test_propose_with_a_fairness_limit_says_whether_it_was_met(self, admin_client, cohort):
+        Semester.objects.filter(pk=cohort.pk).update(team_size=2, min_team_size=2)
+        response = admin_client.post(reverse('admin:project_semester_changelist'), {
+            'action': 'propose_assignments', 'index': 0, '_selected_action': [cohort.id], 'fairness': '2'})
+
+        content = response.content.decode()
+        assert response.context['proposal'].max_rank == 2
+        assert 'Fairness limit: nobody below their second choice.' in content
+        assert 'Met for every student.' in content
+        assert 'Worst placement:' in content
+
+    def compare_action(self, client, semester, settings, fairness=''):
+        return client.post(reverse('admin:project_semester_changelist'), {
+            'action': 'compare_team_sizes', 'index': 0, '_selected_action': [semester.id],
+            'settings': settings, 'fairness': fairness})
+
+    def test_compare_shows_each_setting_side_by_side_and_saves_nothing(self, admin_client, cohort):
+        response = self.compare_action(admin_client, cohort, '2, 3, 1-3')
+
+        assert response.status_code == 200
+        assert response.templates[0].name == 'admin/project/semester/team_size_comparison.html'
+        comparisons = response.context['comparisons']
+        assert [c.label for c in comparisons] == ['2', '3', '1 to 3']
+        assert comparisons[0].proposal is not None
+        assert comparisons[1].proposal is None  # 4 students cannot make teams of exactly 3
+        content = response.content.decode()
+        assert 'No assignment puts 4 students into teams of 3' in content
+        assert content.count('Open this proposal') == 2
+        assert Assignment.objects.count() == 0
+        cohort.refresh_from_db()
+        assert (cohort.team_size, cohort.min_team_size) == (4, 4)
+
+    def test_compare_rejects_bad_sizes_in_the_form(self, admin_client, cohort):
+        response = self.compare_action(admin_client, cohort, '4, banana')
+
+        assert response.status_code == 200
+        assert 'is not a team size' in response.content.decode()
+        assert 'comparisons' not in response.context
+
+    def test_opening_a_compared_setting_gives_a_normal_proposal(self, admin_client, cohort):
+        response = admin_client.post(reverse('admin:project_semester_propose_with'), {
+            'semester': cohort.id, 'min_size': 1, 'capacity': 3, 'max_rank': '2'})
+
+        proposal = response.context['proposal']
+        assert response.templates[0].name == 'admin/project/semester/assignment_proposal.html'
+        assert (proposal.min_size, proposal.capacity, proposal.max_rank) == (1, 3, 2)
+        assert Assignment.objects.count() == 0
+
+        approved = admin_client.post(reverse('admin:project_semester_approve_assignments'), {'token': proposal.token()})
+        assert approved.status_code == 302
+        assert Assignment.objects.filter(semester=cohort).count() == 4
+
+    def test_opening_a_compared_setting_needs_assignment_permissions(self, client, cohort):
+        staff = User.objects.create_user('staff', password='pw', is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(codename='view_semester'))
+        client.force_login(staff)
+
+        response = client.post(reverse('admin:project_semester_propose_with'), {
+            'semester': cohort.id, 'min_size': 2, 'capacity': 2})
+
+        assert response.status_code == 403
+
+    def test_opening_with_missing_values_goes_back_with_a_message(self, admin_client, cohort):
+        response = admin_client.post(reverse('admin:project_semester_propose_with'), {'semester': cohort.id})
+        assert response.status_code == 302
+        assert any('no longer valid' in str(m) for m in response.wsgi_request._messages)

@@ -2,7 +2,9 @@
 
 The admin runs a proposal for a semester, reviews it, can move students between projects
 (PBI-09, #69), and approves it. Team sizes come from the semester, and a project can set its
-own maximum (PBI-08, #68). Nothing is saved until approval: the proposal travels between
+own maximum (PBI-08, #68). A fairness limit keeps students from landing below a chosen
+rank where that is possible, and compare() lays several team-size settings side by side
+(PBI-17, #107). Nothing is saved until approval: the proposal travels between
 steps as a signed token, and only approval writes Assignment rows.
 Model and cost weights: docs/investigations/or-tools-evaluation.md
 """
@@ -36,12 +38,22 @@ def team_limits(project_id, capacity, min_size, overrides):
     return min(min_size, most), most
 
 
-def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, overrides=None, time_limit=10.0):
+def beyond_limit(rank, max_rank):
+    """True when a placement at this rank (None = not ranked) is worse than the fairness limit."""
+    return max_rank is not None and (rank is None or rank > max_rank)
+
+
+def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, overrides=None, time_limit=10.0,
+          max_rank=None):
     """Put every student on exactly one project at the lowest total rank cost.
 
     prefs maps student id -> {project id: rank}. A project gets no students or between
     min_size and capacity of them; min_size defaults to capacity, so every team used is
     exactly that size. overrides maps project id -> that project's own maximum.
+
+    max_rank is the fairness limit: 1, 2 or 3 means "nobody worse than that choice". Fewest
+    students beyond the limit comes first, then lowest total cost, so when everyone can be
+    kept within the limit they are, and when they cannot the result is the closest possible.
     Returns ({student id: project id}, solver status name).
     """
     min_size = capacity if min_size is None else min_size
@@ -59,7 +71,15 @@ def solve(prefs, project_ids, capacity=DEFAULT_TEAM_SIZE, min_size=None, overrid
         fewest, most = team_limits(p, capacity, min_size, overrides)
         model.add(size >= fewest * used)
         model.add(size <= most * used)
-    model.minimize(sum(RANK_COST.get(prefs[s].get(p), UNRANKED_COST) * var for (s, p), var in x.items()))
+    # One student beyond the limit must cost more than any total of rank costs, so the solver
+    # reduces the number of them before it considers anything else.
+    penalty = UNRANKED_COST * len(prefs) + 1
+
+    def cost(s, p):
+        rank = prefs[s].get(p)
+        return RANK_COST.get(rank, UNRANKED_COST) + (penalty if beyond_limit(rank, max_rank) else 0)
+
+    model.minimize(sum(cost(s, p) * var for (s, p), var in x.items()))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -94,6 +114,7 @@ class Proposal:
     min_size: int
     solver_pairs: dict  # {student id: project id} as the solver proposed it, before any moves
     overrides: dict  # {project id: that project's own maximum team size}
+    max_rank: int = None  # the fairness limit used: nobody worse than this choice, where possible
 
     @property
     def pairs(self):
@@ -136,6 +157,29 @@ class Proposal:
                 counts[names[rank]] += 1
         return counts
 
+    @property
+    def worst_rank(self):
+        """The worst placement anyone got: 1, 2, 3, or None when someone is on a project they did not rank."""
+        ranks = [rank for team in self.teams for _, rank in team.members]
+        if not ranks:
+            return 1
+        return None if None in ranks else max(ranks)
+
+    RANK_LABELS = {1: 'first choice', 2: 'second choice', 3: 'third choice', None: 'a project they did not rank'}
+
+    @property
+    def worst_rank_label(self):
+        return self.RANK_LABELS[self.worst_rank]
+
+    @property
+    def max_rank_label(self):
+        return self.RANK_LABELS.get(self.max_rank, '') if self.max_rank else ''
+
+    @property
+    def beyond_limit(self):
+        """How many students are placed worse than the fairness limit (0 when there is no limit)."""
+        return sum(1 for team in self.teams for _, rank in team.members if beyond_limit(rank, self.max_rank))
+
     def token(self):
         return signing.dumps({
             'semester': self.semester.id,
@@ -144,6 +188,7 @@ class Proposal:
             'capacity': self.capacity,
             'min_size': self.min_size,
             'overrides': [[p, most] for p, most in self.overrides.items()],
+            'max_rank': self.max_rank,
             'status': self.status,
             'seconds': self.seconds,
         }, salt=TOKEN_SALT)
@@ -164,7 +209,8 @@ def _candidate_projects(semester):
     )
 
 
-def _build(semester, result, prefs, projects, status, seconds, capacity, min_size, solver_pairs, overrides):
+def _build(semester, result, prefs, projects, status, seconds, capacity, min_size, solver_pairs, overrides,
+           max_rank=None):
     """Turn {student id: project id} into a Proposal with each student's rank of their project."""
     students = Student.objects.in_bulk(list(result))
     teams, unused = [], []
@@ -175,14 +221,14 @@ def _build(semester, result, prefs, projects, status, seconds, capacity, min_siz
             teams.append(Team(project, members, *team_limits(project.id, capacity, min_size, overrides)))
         else:
             unused.append(project)
-    return Proposal(semester, teams, unused, status, seconds, capacity, min_size, solver_pairs, overrides)
+    return Proposal(semester, teams, unused, status, seconds, capacity, min_size, solver_pairs, overrides, max_rank)
 
 
-def propose(semester, capacity=None, min_size=None):
+def propose(semester, capacity=None, min_size=None, max_rank=None):
     """Solve the semester's assignment. Students are those with preferences for the semester;
     projects are the semester's projects that are not cancelled. Team sizes are the semester's
     team_size and min_team_size unless passed in, and a project's max_team_size replaces the
-    maximum for that project. Saves nothing."""
+    maximum for that project. max_rank is the fairness limit (see solve). Saves nothing."""
     if capacity is None:
         capacity = semester.team_size
         min_size = semester.min_team_size if min_size is None else min_size
@@ -207,9 +253,55 @@ def propose(semester, capacity=None, min_size=None):
         )
 
     started = time.perf_counter()
-    result, status = solve(prefs, [p.id for p in projects], capacity, min_size, overrides)
+    result, status = solve(prefs, [p.id for p in projects], capacity, min_size, overrides, max_rank=max_rank)
     seconds = time.perf_counter() - started
-    return _build(semester, result, prefs, projects, status, seconds, capacity, min_size, dict(result), overrides)
+    return _build(semester, result, prefs, projects, status, seconds, capacity, min_size, dict(result), overrides,
+                  max_rank)
+
+
+@dataclass
+class Comparison:
+    """One team-size setting in a side-by-side comparison: its proposal, or why it cannot work."""
+    min_size: int
+    capacity: int
+    proposal: Proposal = None
+    error: str = ''
+
+    @property
+    def label(self):
+        return f'{self.capacity}' if self.min_size == self.capacity else f'{self.min_size} to {self.capacity}'
+
+
+def parse_settings(text):
+    """'4, 3-4, 4-5' -> [(4, 4), (3, 4), (4, 5)] as (minimum, team size). Raises ProposalError."""
+    settings = []
+    for part in (text or '').replace(';', ',').split(','):
+        part = part.strip().lower().replace('to', '-').replace(' ', '')
+        if not part:
+            continue
+        low, _, high = part.partition('-')
+        if not (low.isdigit() and (high.isdigit() or not high)):
+            raise ProposalError(f'"{part}" is not a team size. Write sizes like 4 or 3-4, separated by commas.')
+        low, high = int(low), int(high or low)
+        if not 1 <= low <= high:
+            raise ProposalError(f'In "{part}" the minimum must be at least 1 and no larger than the team size.')
+        if (low, high) not in settings:
+            settings.append((low, high))
+    if len(settings) < 2:
+        raise ProposalError('Give at least two different team sizes to compare, for example 4, 3-4.')
+    return settings
+
+
+def compare(semester, settings, max_rank=None):
+    """Propose once per (minimum, team size) setting. A setting that cannot work is reported
+    in its own column, not raised. Saves nothing."""
+    results = []
+    for min_size, capacity in settings:
+        try:
+            results.append(Comparison(min_size, capacity, propose(semester, capacity, min_size, max_rank)))
+        except ProposalError as e:
+            results.append(Comparison(min_size, capacity, error=str(e)))
+    return results
 
 
 def _apply(data, moves):
@@ -248,7 +340,7 @@ def edit(token, moves):
     overrides = {p: most for p, most in data.get('overrides', [])}
     return _build(semester, result, prefs, projects, data.get('status', ''), data.get('seconds'),
                   data.get('capacity', DEFAULT_TEAM_SIZE), data.get('min_size', DEFAULT_TEAM_SIZE),
-                  solver_pairs, overrides)
+                  solver_pairs, overrides, data.get('max_rank'))
 
 
 def approve(token):

@@ -35,6 +35,11 @@
         <li>First choice: {{ counts.first }} &middot; Second: {{ counts.second }} &middot; Third: {{ counts.third }}
             &middot; <span{% if counts.unranked %} class="rank-none"{% endif %}>Not ranked: {{ counts.unranked }}</span></li>
         {% endwith %}
+        <li>Worst placement: <span{% if not proposal.worst_rank %} class="rank-none"{% endif %}>{{ proposal.worst_rank_label }}</span></li>
+        {% if proposal.max_rank %}
+        <li>Fairness limit: nobody below their {{ proposal.max_rank_label }}.
+            {% if proposal.beyond_limit %}<span class="rank-none">It could not be met for {{ proposal.beyond_limit }} student{{ proposal.beyond_limit|pluralize }}; this is the closest possible.</span>{% else %}Met for every student.{% endif %}</li>
+        {% endif %}
         <li class="proposal-note">Solver result: {{ proposal.status|lower }} in {{ proposal.seconds|floatformat:2 }} s{% with moved=proposal.moved|length %}{% if moved %}, then {{ moved }} student{{ moved|pluralize }} moved by hand{% endif %}{% endwith %}</li>
     </ul>
 
