@@ -6,7 +6,7 @@ Handoff documentation for the Capstone Design Manager. Each folder names its aud
 |---|---|---|
 | [user-guide/](user-guide/) | students, sponsors, the instructor | how to use the site |
 | [development-guide/](development-guide/) | developers | local setup, branching, [data model](development-guide/data-model.md) |
-| [deployment-guide/](deployment-guide/) | whoever hosts the site | production setup and operations |
+| [deployment-guide/](deployment-guide/) | whoever hosts the site | what is running, [first deployment](deployment-guide/first-deployment.md), [configuration](deployment-guide/configuration.md), [operations](deployment-guide/operations.md): deploying, backups, troubleshooting |
 | [testing/](testing/) | developers | test plan, how to run tests, what is covered |
 | [security/](security/) | developers, the sponsor | security assessment and maintenance checklist |
 | [decisions/](decisions/) | developers | architecture decision records |
