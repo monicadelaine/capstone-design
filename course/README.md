@@ -5,7 +5,7 @@
 - [presentations/](presentations/): preliminary and iteration presentation PDFs
 - [iterations/iteration-1/](iterations/iteration-1/): planning snapshot, sponsor planning record, review, retrospective
 - [iterations/iteration-2/](iterations/iteration-2/): sponsor planning record, snapshots, review, retrospective, demo script
-- [iterations/iteration-3/](iterations/iteration-3/): sponsor planning record (draft)
+- [iterations/iteration-3/](iterations/iteration-3/): sponsor planning record, [review](iterations/iteration-3/review.md), [retrospective](iterations/iteration-3/retrospective.md)
 - Iteration submission tags: `iteration-1-submission`, `iteration-2-submission`, `iteration-3-submission`
 
 ## Stand-ups
@@ -26,5 +26,16 @@ Stand-ups are GitHub Issues labeled `stand-up`, one per meeting, with a comment 
 | 10 | 2026-10-13 | [#40](https://github.com/monicadelaine/capstone-design/issues/40) |
 | 11 | 2026-10-15 | [#41](https://github.com/monicadelaine/capstone-design/issues/41) |
 | 12 | 2026-10-20 | [#42](https://github.com/monicadelaine/capstone-design/issues/42) |
+| 13 | 2026-10-28 | [#85](https://github.com/monicadelaine/capstone-design/issues/85) |
+| 14 | 2026-10-31 | [#87](https://github.com/monicadelaine/capstone-design/issues/87) |
+| 15 | 2026-11-02 | [#88](https://github.com/monicadelaine/capstone-design/issues/88) |
+| 16 | 2026-11-03 | [#89](https://github.com/monicadelaine/capstone-design/issues/89) |
+| 17 | 2026-11-05 | [#91](https://github.com/monicadelaine/capstone-design/issues/91) |
+| 18 | 2026-11-10 | [#92](https://github.com/monicadelaine/capstone-design/issues/92) |
+| 19 | 2026-11-12 | [#94](https://github.com/monicadelaine/capstone-design/issues/94) |
+| 20 | 2026-11-14 | [#100](https://github.com/monicadelaine/capstone-design/issues/100) |
+| 21 | 2026-11-17 | [#103](https://github.com/monicadelaine/capstone-design/issues/103) |
+| 22 | 2026-11-17 | [#104](https://github.com/monicadelaine/capstone-design/issues/104) |
+| 23 | 2026-11-19 | [#111](https://github.com/monicadelaine/capstone-design/issues/111) |
 
 Gaps: none recorded 9/24 to 10/1 (Iteration 1 deadline week and the week after) or on 10/22. #30 is a duplicate of #29.
