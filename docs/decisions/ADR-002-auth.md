@@ -32,3 +32,17 @@ Revisit MySSO as a recommendation in the handoff documentation if the sponsor wa
 - A `role` field is added to our user data (see [development-guide/data-model.md](../development-guide/data-model.md)).
 - The Auth0 Actions from the prior team's Cloud-V2 branch are not reused.
 - New backlog items: create Auth0 tenant; permission class; authenticate open endpoints; remove role hint from signup.
+
+## As built (2026-11-21)
+
+What was implemented, where it differs from the decision above:
+
+| Decided | Built |
+|---|---|
+| A tenant the team and sponsor control | Done: `dev-hx43g1ojtwfadqxq.us.auth0.com`, used by every env template ([Auth0 setup](../development-guide/auth0-setup.md)) |
+| Students are recognized by the roster | Done in the backend: `student_for_user` matches the token's email to the Students table, and only the instructor's import adds students (PRs #55, #101, #118) |
+| Sponsors are everyone else who signs up | Done through the `sponsor` role in the token, with ownership checked against the Sponsor record |
+| Admin is granted in our database, not by an Auth0 role | Not built. API admin is the Auth0 `admin` role. The instructor's own tools use Django staff accounts instead ([ADR-006](ADR-006-instructor-tools-in-django-admin.md)) |
+| A `role` field in our user data | Not built. Roles stayed in the token |
+| The client-supplied role hint is removed | The Auth0 Action ignores it; the signup page still sends it. Tracked in #77 |
+| A permission class, and login required on the semester and email endpoints | Done (PRs #55, #99, #108). See the [security assessment](../security/README.md) |

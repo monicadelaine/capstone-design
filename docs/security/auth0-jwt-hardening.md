@@ -1,7 +1,7 @@
 # Auth0 JWT hardening (Sprint 1)
 
-**Repository:** `monicadelaine/capstone-design`  
-**Scope:** `backend/user/authentication.py` only; no production changes.
+**Status:** merged in PR #98 on 2026-11-14, CI green. Part of the [security assessment](README.md).
+**Scope:** `backend/user/authentication.py`.
 
 ## Finding
 The existing authentication class allowed the JWT `alg` header to select the decoder algorithm and accepted JWTs without a `kid` by selecting the first published key. Both values originate from untrusted token input.
@@ -23,9 +23,10 @@ python manage.py check --deploy
 
 Review failures before deploying. `check --deploy` may produce expected deployment-specific warnings; evaluate rather than suppress them.
 
-## Next work
-- Audit role and object-level permissions for attachments, feedback, and user endpoints.
-- Audit token-management requirements and document the intended student invitation flow.
-- Review media storage, database backup retention, restoration, and recovery objectives.
+## Since then
 
-**Status:** patch prepared; CI and application tests not yet executed.
+The follow-up work listed when this change was made has been done:
+
+- Role and object-level permissions for attachments, feedback, and user records: [attachment and feedback permissions](attachment-feedback-permissions.md) (PR #108) and [user records](user-records.md) (PR #99).
+- Signing-key caching and rotation handling: [JWKS cache](jwks-cache-debug-panel.md) (PR #105).
+- Media storage, database backup, and restore: [deployment guide](../deployment-guide/operations.md#back-up-the-database).

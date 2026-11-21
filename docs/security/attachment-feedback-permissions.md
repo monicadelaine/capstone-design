@@ -1,5 +1,7 @@
 # SECURITY-02 — Attachment and feedback authorization (#57)
 
+**Status:** merged in PR #108 on 2026-11-20, closing #57. Part of the [security assessment](README.md).
+
 ## Problem
 Both endpoints previously permitted all logged-in users to perform writes. The
 attachment download endpoint also fetched records directly, bypassing the
@@ -29,7 +31,6 @@ python -m pytest -v project/tests/test_endpoint_permissions_security.py
 python -m pytest -q
 ```
 
-Run the frontend tests and review the PR diff and CI before merging.
 
 ## Follow-up
 Access to all student/sponsor roster fields and server-side assignment of Auth0

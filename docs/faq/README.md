@@ -185,4 +185,4 @@ Yes. Every visitor's browser receives them. Never commit a client secret, a Mana
 
 ### Where did the previous team's work go?
 
-It is the base of this code. What it was and what was wrong with it is in the [v1 reference](../investigations/v1-reference.md). The `deployment.pdf` in the repository root is theirs and describes a setup that no longer exists; use the [deployment guide](../deployment-guide/README.md).
+It is the base of this code. What it was and what was wrong with it is in the [v1 reference](../investigations/v1-reference.md). Their own documents are kept in [investigations/v1/](../investigations/v1/README.md) as a record; they describe a setup that no longer exists, so use the [deployment guide](../deployment-guide/README.md).

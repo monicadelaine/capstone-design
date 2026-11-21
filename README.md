@@ -7,17 +7,39 @@ A web platform for the University of Alabama Computer Science senior design cour
 
 ## Status
 
-**Iteration 2 (due 2026-10-27).** Deployed on Google Cloud at https://ua-capstone-design.duckdns.org/. Students rank projects; sponsors submit projects; the API limits each user to their own data; the instructor can have OR-Tools propose an assignment of students to projects and approve it in Django admin. Review: [course/iterations/iteration-2/review.md](course/iterations/iteration-2/review.md).
+**Iteration 3, the final iteration (reviewed 2026-11-20).** One full semester runs end to end:
 
-Remaining work for Iteration 3 and handoff is the Product Backlog view on the board below.
+1. A sponsor submits a project, with files and links.
+2. The instructor reviews it and approves it into a semester.
+3. The instructor imports the class roster from Blackboard.
+4. Students rank projects: five high, five medium, five low.
+5. A solver (Google OR-Tools) proposes teams. The instructor can compare team sizes, move students, and approve.
+6. Students and sponsors see their teams, and students are emailed.
+
+Students and sponsors use the Vue app. The instructor works in the Django admin area. A deployment runs at https://ua-capstone-design.duckdns.org/; the [deployment guide](docs/deployment-guide/README.md) describes what is running there and how to bring it up to the current `main`.
+
+Review: [course/iterations/iteration-3/review.md](course/iterations/iteration-3/review.md). What we would do next: [recommendations](docs/recommendations/README.md).
+
+## Documentation
+
+Everything is in [docs/](docs/). Start with the page for what you are doing:
+
+| I want to... | Read |
+|---|---|
+| Use the site as a student, sponsor, or instructor | [User guide](docs/user-guide/README.md) |
+| Run the project on my machine and change the code | [Development guide](docs/development-guide/README.md), then [architecture](docs/development-guide/architecture.md) |
+| Host the site, deploy a new version, back it up | [Deployment guide](docs/deployment-guide/README.md) |
+| Take over the project | [FAQ](docs/faq/README.md) and [recommendations](docs/recommendations/README.md) |
+| Know what protects the data and what is still open | [Security assessment](docs/security/README.md) |
+| Run or write tests | [Testing](docs/testing/README.md) |
+| Understand why it is built this way | [Decisions](docs/decisions/README.md) and [investigations](docs/investigations/) |
 
 ## Links
 
 - **GitHub Project board (backlog, iteration plans, results):** https://github.com/users/mbaizhakyp/projects/1. It is owned by a team member's account, so it does not appear under this repository's Projects tab; the Senior Design Project linked there is the course example.
-- **Documentation:** [docs/](docs/) — [development guide](docs/development-guide/), [data model](docs/development-guide/data-model.md), [decisions](docs/decisions/), [v1 reference](docs/investigations/v1-reference.md)
 - **Course records:** [course/](course/) — presentations, iteration reviews and retrospectives
 - **Stand-ups:** [Issues labeled `stand-up`](https://github.com/monicadelaine/capstone-design/issues?q=label%3Astand-up), indexed by date in [course/](course/README.md#stand-ups)
-- **Prior team's repository (reference only):** https://github.com/jmburke4/capstone-design-manager
+- **Prior team's repository (reference only):** https://github.com/jmburke4/capstone-design-manager. Their documents are kept in [docs/investigations/v1/](docs/investigations/v1/README.md).
 
 ## Run it locally
 
@@ -47,4 +69,4 @@ One Issue per piece of work, labeled by type. Code changes go on a branch and th
 
 ## Technology
 
-Vue 3 + Vite frontend, Django REST Framework backend, PostgreSQL, Auth0 for login, MinIO/S3 for file storage, Docker Compose for development. See [docs/decisions/](docs/decisions/) for why.
+Vue 3 + Vite frontend, Django 5.2 with Django REST Framework, PostgreSQL, Auth0 for login, Google OR-Tools for team assignment, Docker Compose for development and production. Uploaded files go to MinIO in development and Google Cloud Storage in production. 496 backend and 75 frontend tests run in CI on every push. See [docs/decisions/](docs/decisions/) for why.

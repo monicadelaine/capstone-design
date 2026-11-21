@@ -2,7 +2,7 @@
 
 **Audience:** whoever hosts the site: the next team, the sponsor, or a department administrator. How the production site is put together, how to build it from nothing, and how to keep it running.
 
-This guide describes the production setup on `main` as of 2026-11-20. It replaces the previous team's `deployment.pdf` in the repository root, which describes a Google Cloud project, a domain, and a `Cloud-V2` branch that no longer exist.
+This guide describes the production setup on `main` as of 2026-11-20. It replaces the previous team's [`deployment.pdf`](../investigations/v1/README.md), which describes a Google Cloud project, a domain, and a `Cloud-V2` branch that no longer exist.
 
 ## Start here
 

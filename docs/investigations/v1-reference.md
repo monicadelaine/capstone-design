@@ -7,7 +7,7 @@
 - Prior site: https://jmburke4.github.io/capstone-design-manager/
 - Prior production: https://ua-capstone-projects.com (GCP VM, may be down)
 - Our copy of their `main` branch: this repo's `backend/` and `frontend/` as of the initial commit
-- Their `userguide.pdf`, deployment doc, and READMEs
+- Their `userguide.pdf`, deployment doc, and READMEs (the documents are kept in [v1/](v1/README.md))
 
 File:line pointers below refer to our copy of their `main`.
 

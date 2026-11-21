@@ -1,5 +1,7 @@
 # Security: User roster write permissions
 
+**Status:** merged in PR #99 on 2026-11-17. Part of the [security assessment](README.md).
+
 ## Finding
 `SponsorViewSet` and `StudentViewSet` previously used `IsAuthenticated` alone. Any
 authenticated user could create, edit, or delete student and sponsor database
@@ -32,4 +34,4 @@ python -m pytest -q
   before production rollout.
 - Does not change emails, project assignment, attachment logic, or user-role
   creation in Auth0.
-- Apply only after reviewing any new PRs that touch the `backend/user/` paths.
+- PR #118 (2026-11-21) closed one more path on the `/profile/` endpoint: a student token can no longer add itself to the roster. Students are added only by the instructor's roster import.
