@@ -194,3 +194,27 @@ class TestDeadlineReminders:
         call_command('send_deadline_reminders')
         assert 'emailed 1 student(s), 0 failed' in capsys.readouterr().out
         assert len(mail.outbox) == 1
+
+@pytest.mark.django_db
+def test_deadline_reminder_uses_portable_date_format(semester):
+    from django.core import mail
+    from emails.utils import EmailClient
+    from user.models import Student
+
+    student = Student.objects.create(
+        cwid="12345678",
+        first_name="Test",
+        last_name="Student",
+        email="portable-date@example.com",
+    )
+
+    EmailClient().send_deadline_reminder(student, semester, days_left=2)
+
+    from django.utils import timezone
+
+    deadline = timezone.localtime(semester.assignment_date)
+    expected_date = f"{deadline:%b} {deadline.day}"
+
+    assert len(mail.outbox) == 1
+    assert expected_date in mail.outbox[0].subject
+    assert student.email in mail.outbox[0].to

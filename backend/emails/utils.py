@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.formats import date_format
 
 from emails.models import EmailLog
 
@@ -81,9 +82,15 @@ class EmailClient:
             },
         )
 
+
     def send_deadline_reminder(self, student, semester, days_left):
+        deadline = timezone.localtime(semester.assignment_date)
+
         return self.send_templated_email(
-            subject=f"Reminder: rank your UA CS Capstone project preferences by {timezone.localtime(semester.assignment_date):%b %-d}",
+            subject=(
+                "Reminder: rank your UA CS Capstone project preferences by "
+                f"{date_format(deadline, 'M j')}"
+            ),
             recipient_list=[student.email],
             template_name="deadline_reminder",
             kind=EmailLog.Kind.DEADLINE_REMINDER,
@@ -91,7 +98,7 @@ class EmailClient:
             context={
                 'student_name': student.preferred_name or student.first_name,
                 'semester': str(semester),
-                'deadline': f'{timezone.localtime(semester.assignment_date):%A, %B %-d at %-I:%M %p %Z}',
+                'deadline': date_format(deadline, r'l, F j \a\t g:i A T'),
                 'days_left': days_left,
                 'ranking_url': f'{settings.APP_URL}/student/submit',
             },
