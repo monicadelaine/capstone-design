@@ -93,6 +93,20 @@ def owns_student_id(user, student_id):
     return student is not None and str(student.id) == str(student_id)
 
 
+class HasAssignedRole(BasePermission):
+    """Reject valid Auth0 users with no recognized application role.
+
+    This is a coarse API boundary, not a replacement for object-level
+    authorization or university-roster verification.
+    """
+
+    message = 'An assigned application role is required.'
+
+    def has_permission(self, request, view):
+        return any(user_has_role(request.user, role)
+                   for role in ('admin', 'sponsor', 'student'))
+
+
 class IsAdminRole(BasePermission):
     """Only users carrying the admin role."""
 
