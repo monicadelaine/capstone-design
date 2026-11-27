@@ -622,7 +622,7 @@ class TestSemesterAdminFlow:
             client.force_authenticate(user=UserWrapper({'email': email, 'sub': f'auth0|{email}', 'roles': roles}))
             return client
 
-        as_student = api_client(student.email, [])
+        as_student = api_client(student.email, ['student'])
         as_sponsor = api_client(sponsor.email, ['sponsor'])
         url = reverse('project:assignment-list')
 

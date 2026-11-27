@@ -17,6 +17,7 @@ from user.authentication import Auth0Authentication
 from .models import Assignment, Attachment, Feedback, Preference, Project, Semester
 from .permissions import (
     AdminWriteOrReadOnly,
+    HasAssignedRole,
     AttachmentWritePermission,
     IsAdminRole,
     SponsorFeedbackPermission,
@@ -50,7 +51,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     authentication_classes = [Auth0Authentication]
     # Reads: any authenticated user. Writes: admins, or sponsors on their own projects.
-    permission_classes = [IsAuthenticated, ProjectWritePermission]
+    permission_classes = [IsAuthenticated, HasAssignedRole, ProjectWritePermission]
 
     def get_queryset(self):
         """Rejected projects are hidden from everyone except admins and the owning sponsor (#67)."""
@@ -66,12 +67,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     # Instructor review of submitted projects (PBI-07, #67). Admin only.
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsAdminRole])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, HasAssignedRole, IsAdminRole])
     def pending(self, request):
         """Projects waiting for review, oldest first, with their sponsor and description."""
         return Response(ProjectReviewSerializer(pending_projects(), many=True).data)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsAdminRole])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasAssignedRole, IsAdminRole])
     def approve(self, request, pk=None):
         """Put the project on a semester so students see it. Body: {"semester": id}, optional;
         the current semester is used when it is left out."""
@@ -88,7 +89,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(ProjectReviewSerializer(project).data)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsAdminRole])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, HasAssignedRole, IsAdminRole])
     def reject(self, request, pk=None):
         """Mark the project Cancelled and take it off every semester."""
         project = self.get_object()
@@ -107,7 +108,7 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['project']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated, AttachmentWritePermission]
+    permission_classes = [IsAuthenticated, HasAssignedRole, AttachmentWritePermission]
 
     def get_queryset(self):
         """A rejected project's files are hidden like the project itself (#67)."""
@@ -140,7 +141,7 @@ class SemesterViewSet(viewsets.ModelViewSet):
     filterset_fields = ['semester', 'year']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
+    permission_classes = [IsAuthenticated, HasAssignedRole, AdminWriteOrReadOnly]
 
     @action(detail=False, methods=['get'])
     def current(self, request):
@@ -153,7 +154,7 @@ class SemesterViewSet(viewsets.ModelViewSet):
 
 class PreferenceAPIView(APIView):
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasAssignedRole]
 
     @staticmethod
     def deadline_closed_response():
@@ -289,7 +290,7 @@ class AssignmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['semester', 'student', 'project']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated, AdminWriteOrReadOnly]
+    permission_classes = [IsAuthenticated, HasAssignedRole, AdminWriteOrReadOnly]
 
     def get_queryset(self):
         """Admins see all. A student sees their own assignment and their teammates' (the
@@ -317,7 +318,7 @@ class FeedbackViewSet(viewsets.ModelViewSet):
     filterset_fields = ['sponsor', 'project', 'semester']
 
     authentication_classes = [Auth0Authentication]
-    permission_classes = [IsAuthenticated, SponsorFeedbackPermission]
+    permission_classes = [IsAuthenticated, HasAssignedRole, SponsorFeedbackPermission]
 
     def get_queryset(self):
         if is_admin(self.request.user):
