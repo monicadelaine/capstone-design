@@ -64,7 +64,7 @@ def make_projects(semester, sponsor, names):
 
 def make_students(count):
     return [
-        Student.objects.create(cwid=f'{10000000 + i}', first_name=f'S{i}', last_name='Test', email=f's{i}@example.com')
+        Student.objects.create(cwid=f'{10000000 + i}', first_name=f'S{i}', last_name='Test', email=f's{i}@crimson.ua.edu')
         for i in range(count)
     ]
 
@@ -551,7 +551,7 @@ class TestSemesterAdminFlow:
 
         response = admin_client.post(reverse('admin:project_semester_approve_assignments'), {'token': token})
 
-        assert sorted(m.to[0] for m in mail.outbox) == ['s0@example.com', 's1@example.com', 's2@example.com', 's3@example.com']
+        assert sorted(m.to[0] for m in mail.outbox) == ['s0@crimson.ua.edu', 's1@crimson.ua.edu', 's2@crimson.ua.edu', 's3@crimson.ua.edu']
         messages = [str(m) for m in response.wsgi_request._messages]
         assert 'Emailed 4 student(s) their assignment. Failed: 0.' in messages
 
