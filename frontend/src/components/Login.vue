@@ -44,15 +44,9 @@ const handleLogin = () => {
 const handleSignup = (role) => {
 	closeSignupModal();
 	
-	// Pass role as a custom scope instead of query parameter
-	// Format: 'openid profile email role:student' or 'role:sponsor'
-	const baseScopes = 'openid profile email';
-	const roleScope = `role:${role}`;
-	
 	loginWithRedirect({
 		authorizationParams: {
 			screen_hint: 'signup',
-			scope: `${baseScopes} ${roleScope}`,
 			...(role === 'student' && { connection: 'Username-Password-Authentication' })
 		}
 	});
