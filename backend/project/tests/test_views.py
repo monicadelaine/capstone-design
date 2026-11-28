@@ -76,7 +76,7 @@ def second_sponsor(db):
 def sample_student(db):
     return Student.objects.create(
         cwid="12345678",
-        email="student@example.com",
+        email="student@crimson.ua.edu",
         first_name="Jane",
         last_name="Smith",
         class_code=Student.Class.SENIOR,

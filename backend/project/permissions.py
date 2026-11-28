@@ -74,14 +74,18 @@ def hide_rejected_projects(queryset, user, project_path=''):
 
 
 def student_for_user(user):
-    """The Student record matching the authenticated user's email, or None.
+    """Return a student only when both trusted role and roster eligibility match.
 
-    Per ADR-002 a student is recognised by being on the roster (Student table), not by a
-    role claim the client could influence.
+    A student must have an Auth0 student role, a crimson.ua.edu email,
+    and a matching entry in the instructor-managed Student roster.
     """
-    email = getattr(user, 'email', '') or ''
-    if not email:
+    if not user_has_role(user, 'student'):
         return None
+
+    email = (getattr(user, 'email', '') or '').strip()
+    if not email.lower().endswith('@crimson.ua.edu'):
+        return None
+
     return Student.objects.filter(email__iexact=email).first()
 
 
